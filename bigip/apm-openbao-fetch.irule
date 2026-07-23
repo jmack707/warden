@@ -1,0 +1,47 @@
+#-----------------------------------------------------------------------------
+# T2.1/T2.3 — APM iRule Event fallback for the OpenBao credential fetch (Option B in
+# phase2-apm-notes.md). Attach to the front-door VS; the per-session policy fires an
+# "iRule Event" agent with agent id `openbao_fetch` after OCSP auth.
+#
+# PoC-grade: plaintext sideband to dev-mode OpenBao + regexp JSON extraction. For
+# production, move to iRulesLX (real JSON parse), enable TLS on OpenBao, pin its CA,
+# and seed the scoped token from an APM system variable rather than a session var.
+#
+# ⚠ VALIDATE on the deployed 21.1.0 build before relying on it.
+#-----------------------------------------------------------------------------
+when ACCESS_POLICY_AGENT_EVENT {
+    if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
+        set bao_host "10.2.20.30"
+        set bao_port 8200
+        # scoped token seeded from an encrypted APM system variable at policy start:
+        set bao_tok [ACCESS::session data get session.custom.pua.baotoken]
+
+        set conn [connect -timeout 3000 -idle 5 -status cs "$bao_host:$bao_port"]
+        if { $conn eq "" } {
+            ACCESS::session data set session.custom.pua.fetch_err "connect-failed"
+            return
+        }
+        set req "GET /v1/ldap/creds/pua-admin HTTP/1.1\r\nHost: ${bao_host}\r\nX-Vault-Token: ${bao_tok}\r\nConnection: close\r\n\r\n"
+        send -timeout 3000 $conn $req
+        set resp ""
+        while { 1 } {
+            set chunk [recv -timeout 3000 $conn]
+            if { $chunk eq "" } { break }
+            append resp $chunk
+        }
+        close $conn
+
+        if { [regexp {"username"\s*:\s*"([^"]+)"} $resp -> u] } {
+            ACCESS::session data set session.custom.pua.username $u
+        }
+        if { [regexp {"password"\s*:\s*"([^"]+)"} $resp -> p] } {
+            ACCESS::session data set session.custom.pua.password $p
+        }
+        if { [regexp {"lease_id"\s*:\s*"([^"]+)"} $resp -> l] } {
+            ACCESS::session data set session.custom.pua.lease_id $l
+        }
+        if { ![ACCESS::session data get session.custom.pua.username] } {
+            ACCESS::session data set session.custom.pua.fetch_err "parse-failed"
+        }
+    }
+}
