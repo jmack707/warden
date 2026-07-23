@@ -47,11 +47,15 @@ ncode=$(curl -sk -o /dev/null -w '%{http_code}' -u "$NEG:NegTest1!" "$B/mgmt/tm/
 ldapdelete -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" "uid=${NEG},ou=users,${BASE_DN}" >/dev/null 2>&1
 rm -f /tmp/neg.ldif
 
-echo "== 4. revoke ends auth =="
+echo "== 4. revoke ends auth (revocation is async — poll up to 12s) =="
 bao lease revoke "$LEASE" >/dev/null 2>&1
-sleep 1
-rcode=$(curl -sk -o /dev/null -w '%{http_code}' -u "$U:$PW" "$B/mgmt/tm/sys/version")
-[ "$rcode" = 401 ] && ok "revoked credential rejected (401)" || no "revoked cred still $rcode"
+rcode=200
+for _ in $(seq 1 12); do
+  rcode=$(curl -sk -o /dev/null -w '%{http_code}' -u "$U:$PW" "$B/mgmt/tm/sys/version")
+  [ "$rcode" = 401 ] && break
+  sleep 1
+done
+[ "$rcode" = 401 ] && ok "revoked credential rejected (401)" || no "revoked cred still $rcode after 12s"
 
 echo "== 5. recovery: local admin still works =="
 if [ -n "${BIGIP_PASS:-}" ]; then

@@ -78,3 +78,9 @@ Per the runbook's standing instruction to record every deviation.
   mutation. Per operator decision the flip is run by hand on bigipa
   (`modify auth source { type ldap } ; save sys config`). admin/root stay local, so
   there is no lockout risk. GATE 1B tests run after the flip.
+- **OpenBao lease revoke is ASYNCHRONOUS** ("All revocation operations queued
+  successfully!") — the ephemeral LDAP entry is deleted a beat *after* `bao lease revoke`
+  returns (observed ~1-2s). Tests must POLL for deletion, not check once immediately;
+  `validate-phase1.sh` (step 5) and `gate1b-verify.sh` (step 4) now poll up to 10-12s.
+  Operational note: revocation ends *future* logins with a small delay, not instantly —
+  established sessions are still cut by Guacamole/APM session kill (runbook invariant 4).

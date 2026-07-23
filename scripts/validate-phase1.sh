@@ -39,11 +39,16 @@ echo "== 4. revoke lease =="
 bao lease revoke "$LEASE_ID" >/dev/null
 ok "revoked $LEASE_ID"
 
-echo "== 5. entry gone after revoke; bind now fails =="
-GONE="$(ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" \
-  -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
-  -b "ou=users,${BASE_DN}" "(uid=${USERNAME})" uid || true)"
-[ -z "$(grep 'uid:' <<<"$GONE" || true)" ] || fail "entry still present after revoke"
+echo "== 5. entry gone after revoke (revocation is async — poll up to 10s); bind then fails =="
+GONE=""
+for _ in $(seq 1 10); do
+  GONE="$(ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" \
+    -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
+    -b "ou=users,${BASE_DN}" "(uid=${USERNAME})" uid || true)"
+  grep -q 'uid:' <<<"$GONE" || break
+  sleep 1
+done
+[ -z "$(grep 'uid:' <<<"$GONE" || true)" ] || fail "entry still present 10s after revoke"
 if LDAPTLS_CACERT="$CA" ldapwhoami -x -H "ldaps://${LAB_HOST_IP}" \
      -D "uid=${USERNAME},ou=users,${BASE_DN}" -w "${PASSWORD}" >/dev/null 2>&1; then
   fail "bind still succeeds after revoke"
