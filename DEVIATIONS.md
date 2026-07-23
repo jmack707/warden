@@ -54,3 +54,27 @@ Per the runbook's standing instruction to record every deviation.
 - `username_template='pua-{{random 10 | lowercase}}'` accepted as-is (no fallback needed).
 - **GATE 1A: PASSED** — issue -> directory entry (+employeeType) -> LDAPS bind ->
   revoke -> entry gone + bind rejected -> issuance in the audit log.
+
+## Findings during execution (Phase 1, BIG-IP)
+- **RUNBOOK GAP — bind account needs a read ACL (added `ldap/acl-bigip-bind.ldif`):**
+  the runbook's `seed.ldif` creates `cn=bigip-bind` but osixia/openldap ships a
+  deny-all catch-all ACL (`{2} to * ... by * none`). `bigip-bind` (a plain
+  inetOrgPerson) therefore could NOT search `ou=users` — BIG-IP's user-DN lookup
+  returned "No such object (32)" and remote auth would have failed at the search step.
+  Fix: an `olcAccess` grant for `bigip-bind` read on `dn.subtree="ou=users"`, inserted
+  AFTER the `userPassword` rule (so passwords stay hidden — verified `bigip-bind` reads
+  `uid`/`employeeType` but 0 `userPassword` lines) and BEFORE the catch-all. Applied via
+  `ldapmodify -Y EXTERNAL -H ldapi:///` inside the container (cn=config isn't reachable
+  with the directory admin bind).
+- **T1.7 reachability:** bigipa's Linux host routes `10.2.20.30` directly out the
+  `internal` TMM interface (`src 10.2.20.5`) — LDAPS goes over VLAN 73, not the mgmt
+  gateway. TLS probe returned the correct cert (`CN=openldap.pua.lab`).
+- **T1.7 credential path:** bigipa admin password fetched from the LAB OpenBao
+  `kv/bigip/common` via the sanctioned `f5-onboard` AppRole (`bootstrap/f5-bigip/bin/bao.sh`),
+  never stored in this repo.
+- **T1.7 auth-source flip gated by the harness auto-mode guard:** all additive objects
+  (cert, `auth ldap`, `remote-user`, `remote-role`) applied via REST from Nora, but
+  `PATCH /mgmt/tm/auth/source {type:ldap}` was classifier-blocked as a live auth
+  mutation. Per operator decision the flip is run by hand on bigipa
+  (`modify auth source { type ldap } ; save sys config`). admin/root stay local, so
+  there is no lockout risk. GATE 1B tests run after the flip.
