@@ -51,9 +51,9 @@ fi
 ok "entry deleted, revoked credential rejected"
 
 echo "== 6. audit trail present =="
-docker exec openbao grep -q 'ldap/creds/pua-admin' /tmp/openbao-audit.log \
+docker exec openbao grep -q 'ldap/creds/pua-admin' /openbao/logs/openbao-audit.log \
   || fail "no issuance event in audit log"
-ok "issuance recorded in /tmp/openbao-audit.log"
+ok "issuance recorded in /openbao/logs/openbao-audit.log"
 
 echo
 echo "GATE 1A PASSED — OSS credential core validated end-to-end."

@@ -33,5 +33,24 @@ Per the runbook's standing instruction to record every deviation.
   `10.2.20.30:636` via `/mgmt/tm/util/bash`) before mutating auth, since system-auth
   LDAP egresses on the management plane and must route mgmt -> VyOS -> VLAN 73.
 
-## (fill in during execution)
-- <record any image-pull substitutions, parameter fallbacks, tmsh field-name fixes here>
+## Findings during execution (Phase 1)
+- **openbao mount path:** the image reserves `/openbao` (declares `/openbao/logs`,
+  `/openbao/data` volumes). Mounting the repo at `/openbao:ro` made it read-only and
+  the container refused to start. Moved the config mount to **`/pua:ro`**.
+- **openldap certs mount must be writable:** osixia/openldap 1.5.0 `chown`s
+  `/container/service/slapd/assets/certs` on startup; with `:ro` it dies with
+  "Read-only file system". Dropped `:ro` from that mount (certs are lab material).
+  Also set `certs/ldap.key` to 0644 so slapd (uid 911) can read it.
+- **OpenBao 2.6.1 audit is declarative-only:** `bao audit enable` (API/CLI) is
+  rejected — "cannot enable audit device via API; use declarative, config-based audit
+  device management instead". Added **`openbao/openbao.hcl`** with an `audit "file"`
+  stanza (requires `type`, `path`, and an `options { file_path }` block) and load it via
+  `server -dev -config=/pua/openbao.hcl`. Audit log path is now
+  `/openbao/logs/openbao-audit.log` (was `/tmp/openbao-audit.log` in the runbook).
+- **dev-mode OpenBao is ephemeral:** every `openbao` container recreate wipes the
+  in-memory state, so `scripts/configure-openbao.sh` must be re-run after any recreate.
+  Acceptable for the PoC (runbook flags dev mode as PoC-only); harden with a real
+  storage backend for anything persistent.
+- `username_template='pua-{{random 10 | lowercase}}'` accepted as-is (no fallback needed).
+- **GATE 1A: PASSED** — issue -> directory entry (+employeeType) -> LDAPS bind ->
+  revoke -> entry gone + bind rejected -> issuance in the audit log.

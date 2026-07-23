@@ -7,9 +7,9 @@ services:
     environment:
       BAO_DEV_ROOT_TOKEN_ID: "root"          # dev mode: PoC ONLY
       BAO_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-    command: server -dev
+    command: server -dev -config=/pua/openbao.hcl   # -config adds the declarative file-audit device (2.x requirement)
     volumes:
-      - ./openbao:/openbao:ro                # config LDIFs/policy for `bao write ...=@file`
+      - ./openbao:/pua:ro                    # config LDIFs/policy for `bao write ...=@file` (NOT /openbao — reserved by the image)
 
   openldap:
     image: osixia/openldap:1.5.0
@@ -26,7 +26,7 @@ services:
       LDAP_TLS_CA_CRT_FILENAME: "ca.crt"
       LDAP_TLS_VERIFY_CLIENT: "never"
     volumes:
-      - ./certs:/container/service/slapd/assets/certs:ro
+      - ./certs:/container/service/slapd/assets/certs      # NOT :ro — osixia chowns this dir on startup
       - ldapdata:/var/lib/ldap
       - ldapconf:/etc/ldap/slapd.d
 
