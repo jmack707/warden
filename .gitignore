@@ -1,0 +1,8 @@
+# secrets & generated material — never commit
+.env
+certs/*.key
+certs/*.csr
+certs/*.srl
+certs/san.cnf
+*.log
+initdb.sql

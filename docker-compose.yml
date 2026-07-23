@@ -1,0 +1,61 @@
+services:
+  openbao:
+    image: quay.io/openbao/openbao:latest
+    container_name: openbao
+    cap_add: ["IPC_LOCK"]
+    ports: ["8200:8200"]
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: "root"          # dev mode: PoC ONLY
+      BAO_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    command: server -dev
+    volumes:
+      - ./openbao:/openbao:ro                # config LDIFs/policy for `bao write ...=@file`
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: openldap
+    hostname: openldap.pua.lab
+    ports: ["389:389", "636:636"]
+    environment:
+      LDAP_ORGANISATION: "PUA Lab"
+      LDAP_DOMAIN: "pua.lab"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PW}"
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: "ldap.crt"
+      LDAP_TLS_KEY_FILENAME: "ldap.key"
+      LDAP_TLS_CA_CRT_FILENAME: "ca.crt"
+      LDAP_TLS_VERIFY_CLIENT: "never"
+    volumes:
+      - ./certs:/container/service/slapd/assets/certs:ro
+      - ldapdata:/var/lib/ldap
+      - ldapconf:/etc/ldap/slapd.d
+
+  guac-db:
+    image: postgres:16
+    container_name: guac-db
+    environment:
+      POSTGRES_DB: guacamole
+      POSTGRES_USER: guacamole
+      POSTGRES_PASSWORD: guacamole
+    volumes: ["guacdb:/var/lib/postgresql/data"]
+
+  guacd:
+    image: guacamole/guacd:1.6.0
+    container_name: guacd
+
+  guacamole:
+    image: guacamole/guacamole:1.6.0
+    container_name: guacamole
+    ports: ["8080:8080"]
+    environment:
+      GUACD_HOSTNAME: guacd
+      POSTGRESQL_HOSTNAME: guac-db
+      POSTGRESQL_DATABASE: guacamole
+      POSTGRESQL_USERNAME: guacamole
+      POSTGRESQL_PASSWORD: guacamole
+    depends_on: [guacd, guac-db]
+
+volumes:
+  ldapdata:
+  ldapconf:
+  guacdb:

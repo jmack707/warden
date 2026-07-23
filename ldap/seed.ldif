@@ -1,0 +1,13 @@
+dn: ou=users,dc=pua,dc=lab
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=svc,dc=pua,dc=lab
+objectClass: organizationalUnit
+ou: svc
+
+dn: cn=bigip-bind,ou=svc,dc=pua,dc=lab
+objectClass: inetOrgPerson
+cn: bigip-bind
+sn: service
+userPassword: ${BIND_PW}
