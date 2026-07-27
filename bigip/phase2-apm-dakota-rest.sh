@@ -31,7 +31,17 @@ PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
 VIP_IP="${APM_TEST_VIP:-10.2.20.50}"
-BIGIPB="${APM_TARGET_TMUI:-10.2.10.6}"            # remote BIG-IP TMUI via bigipb EXTERNAL self-IP — NOT 10.2.20.6: that is bigipb's configsync/mirror/failover addr in device trust, so bigipa APM rejects it as "reserved address" (01490585, errorcode=17)
+# Shadow façades (RFC5737 TEST-NET-1) — APM portal access refuses "reserved" targets
+# (self-IPs, mgmt, device-trust/cluster addrs -> 01490585/errorcode=17, deviation 10),
+# and exposing TMUI on a routable external self-IP is a security hole (deviation 12).
+# Portal resources target these non-routable façade IPs; plain LTM shadow VSs (TCP/TLS
+# passthrough, all VLANs so tmm's own portal-engine connection hits them) steer the last
+# hop with an iRule `node` (a pool CAN'T hold a self-IP member). Pattern proven on the
+# Nora build (bigip-apm-cert-ldap role, K31750304). Needs
+# tmm.tcl.rule.node.allow_loopback_addresses=true (set below).
+SHADOW_A="${APM_SHADOW_A:-192.0.2.5}"             # -> node 127.0.0.1 = THIS box's TMUI (active unit)
+SHADOW_B="${APM_SHADOW_B:-192.0.2.6}"             # -> node bigipb INTERNAL self-IP
+BIGIPB_BACKEND="${APM_TARGET_TMUI:-10.2.20.6}"    # real last-hop for the B façade (VLAN 73 only)
 REFERER_IRULE='when HTTP_REQUEST {
     if { [HTTP::uri] contains "tmui/login.jsp" } {
         HTTP::header remove "Referer"
@@ -61,6 +71,8 @@ curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash
 step "2b. teardown the mutable graph (VIP/profile/policy/items/agents) so this re-runs cleanly"
 td(){ curl "${A[@]}" -o /dev/null -w "  DEL ${1##*~} -> %{http_code}\n" -X DELETE "$1"; }
 td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-test-vs"
+td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-shadow-a-vs"
+td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-shadow-b-vs"
 td "$B/mgmt/tm/apm/profile/access/~${PART}~${P}"
 td "$B/mgmt/tm/apm/policy/access-policy/~${PART}~${P}"
 for it in ent act_certauth act_varassign act_ldapquery act_groupcheck act_baofetch act_ssocreds act_ssomap act_resourceassign end_allow end_deny; do
@@ -73,12 +85,15 @@ td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssomap_ag"
 td "$B/mgmt/tm/apm/policy/agent/resource-assign/~${PART}~${P}_act_resourceassign_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-allow/~${PART}~${P}_end_allow_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-deny/~${PART}~${P}_end_deny_ag"
+td "$B/mgmt/tm/apm/resource/portal-access/~${PART}~${P}-bigipa-tmui"
 td "$B/mgmt/tm/apm/resource/portal-access/~${PART}~${P}-bigipb-tmui"
 td "$B/mgmt/tm/apm/resource/webtop/~${PART}~${P}-webtop"
 td "$B/mgmt/tm/apm/sso/form-based/~${PART}~${P}-tmui-sso"
 td "$B/mgmt/tm/apm/profile/connectivity/~${PART}~${P}-connectivity"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-referer-strip"
+td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-a-node"
+td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-b-node"
 td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
 
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
@@ -112,24 +127,44 @@ add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_sso
      {varname:"session.sso.token.last.username",expression:"mcget {session.custom.cn}"},
      {varname:"session.sso.token.last.password",expression:"mcget {session.custom.pua.password}",secure:"true"}]}')"
 
-step "4c. delivery objects: SSO form + webtop + Portal Access to bigipb + cred-map/resource-assign (Stage B2)"
-# anti-SSRF: allow the Portal Access proxy to reach an RFC1918/self target
+step "4c. shadow façade VSs (non-reserved portal targets; TLS passthrough; iRule node = last hop)"
+# loopback node targets (127.0.0.1 / own self-IP) need these; peer targets don't, but harmless
 curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
   -d '{"command":"run","utilCmdArgs":"-c \"tmsh modify sys db tmm.tcl.rule.connect.allow_loopback_addresses value true; tmsh modify sys db tmm.tcl.rule.node.allow_loopback_addresses value true; echo db-flags-set\""}' | jq -r '.commandResult // "(ok)"'
+add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-shadow-a-node" --arg b 'when CLIENT_ACCEPTED {
+    node 127.0.0.1 443
+}' '{name:$n,partition:"Common",apiAnonymous:$b}')"
+add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-shadow-b-node" --arg b "when CLIENT_ACCEPTED {
+    node ${BIGIPB_BACKEND} 443
+}" '{name:$n,partition:"Common",apiAnonymous:$b}')"
+mk_shadow_vs(){ # mk_shadow_vs <name> <facade-ip> <irule>
+  add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "$1" --arg d "/$PART/$2:443" --arg ir "/$PART/$3" \
+    '{name:$n,partition:"Common",destination:$d,mask:"255.255.255.255",ipProtocol:"tcp",
+      profiles:[{name:"/Common/tcp"}],rules:[$ir],sourceAddressTranslation:{type:"automap"}}')"
+}
+mk_shadow_vs "${P}-shadow-a-vs" "$SHADOW_A" "${P}-shadow-a-node"
+mk_shadow_vs "${P}-shadow-b-vs" "$SHADOW_B" "${P}-shadow-b-node"
+
+step "4d. delivery objects: SSO form + webtop + Portal Access (both units via façades) + cred-map/resource-assign (Stage B2)"
 # form-based SSO into the target TMUI login page
 add "$B/mgmt/tm/apm/sso/form-based" "$(jq -n --arg n "${P}-tmui-sso" \
   '{name:$n,partition:"Common",startUri:"/tmui/login.jsp*",formAction:"/tmui/logmein.html",formUsername:"username",formPassword:"passwd",formMethod:"post",successMatchType:"url",successMatchValue:"/"}')"
 # webtop (full) + its customization group
 add "$B/mgmt/tm/apm/policy/customization-group" "$(jq -n --arg n "${P}_webtop_cg" '{name:$n,partition:"Common",source:"/Common/modern",type:"webtop"}')"
 add "$B/mgmt/tm/apm/resource/webtop" "$(jq -n --arg n "${P}-webtop" --arg cg "/$PART/${P}_webtop_cg" '{name:$n,partition:"Common",customizationGroup:$cg,webtopType:"full"}')"
-# Portal Access resource -> bigipb TMUI, with form SSO bound on the item
-add "$B/mgmt/tm/apm/resource/portal-access" "$(jq -n --arg n "${P}-bigipb-tmui" --arg h "$BIGIPB" --arg sso "/$PART/${P}-tmui-sso" \
-  '{name:$n,partition:"Common",aclOrder:1,publishOnWebtop:"true",applicationUri:("https://"+$h+"/tmui/login.jsp"),
-    items:{item1:{host:$h,paths:"/*",scheme:"https",port:443,sso:$sso}}}')"
-# portal item headers (destipaddr = PUA node-selection, referer = TMUI login.jsp CSRF) —
-# a header_data_t the REST body can't express; tmsh sets it. `items modify` merges.
-curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
-  -d "$(jq -n --arg u "-c 'tmsh modify apm resource portal-access ${P}-bigipb-tmui items modify { item1 { headers { { name destipaddr value ${BIGIPB} } { name referer value https://${BIGIPB}:443 } } } }'" '{command:"run",utilCmdArgs:$u}')" | jq -r '.commandResult // "  portal item headers set"'
+# Portal Access resources -> each unit's TMUI via its shadow façade, form SSO on the item.
+# destipaddr header = façade (node selection: portal engine connects to it); referer =
+# façade origin (TMUI login.jsp CSRF). headers are a header_data_t the REST body can't
+# express; tmsh sets them. `items modify` merges.
+mk_portal(){ # mk_portal <name> <facade-ip> <acl-order>
+  add "$B/mgmt/tm/apm/resource/portal-access" "$(jq -n --arg n "$1" --arg h "$2" --argjson o "$3" --arg sso "/$PART/${P}-tmui-sso" \
+    '{name:$n,partition:"Common",aclOrder:$o,publishOnWebtop:"true",applicationUri:("https://"+$h+"/tmui/login.jsp"),
+      items:{item1:{host:$h,paths:"/*",scheme:"https",port:443,sso:$sso}}}')"
+  curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
+    -d "$(jq -n --arg u "-c 'tmsh modify apm resource portal-access $1 items modify { item1 { headers { { name destipaddr value $2 } { name referer value https://$2:443 } } } }'" '{command:"run",utilCmdArgs:$u}')" | jq -r '.commandResult // "  portal item headers set"'
+}
+mk_portal "${P}-bigipa-tmui" "$SHADOW_A" 1
+mk_portal "${P}-bigipb-tmui" "$SHADOW_B" 2
 # Referer-strip iRule: TMUI login.jsp rejects a mismatched Referer (CSRF) — remove it
 add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-referer-strip" --arg b "$REFERER_IRULE" '{name:$n,partition:"Common",apiAnonymous:$b}')"
 # connectivity profile (Portal Access requires one on the VS)
@@ -139,9 +174,9 @@ add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_sso
   '{name:$n,partition:"Common",type:"sso-cred-mapping",variables:[
      {varname:"session.sso.token.last.username",expression:"mcget {session.sso.token.last.username}"},
      {varname:"session.sso.token.last.password",expression:"mcget {session.sso.token.last.password}"}]}')"
-# Resource Assign agent (webtop + the portal-access bookmark)
-add "$B/mgmt/tm/apm/policy/agent/resource-assign" "$(jq -n --arg n "${P}_act_resourceassign_ag" --arg wt "/$PART/${P}-webtop" --arg pa "/$PART/${P}-bigipb-tmui" \
-  '{name:$n,partition:"Common",type:"general",rules:[{portalAccessResources:[$pa],webtop:$wt}]}')"
+# Resource Assign agent (webtop + both portal-access bookmarks)
+add "$B/mgmt/tm/apm/policy/agent/resource-assign" "$(jq -n --arg n "${P}_act_resourceassign_ag" --arg wt "/$PART/${P}-webtop" --arg pa "/$PART/${P}-bigipa-tmui" --arg pb "/$PART/${P}-bigipb-tmui" \
+  '{name:$n,partition:"Common",type:"general",rules:[{portalAccessResources:[$pa,$pb],webtop:$wt}]}')"
 
 step "5. policy graph (one transaction)"
 TID=$(curl "${A[@]}" -X POST -H 'Content-Type: application/json' -d '{}' "$B/mgmt/tm/transaction" | jq -r '.transId')

@@ -96,3 +96,18 @@ for reserved/rewrite/portal/apm knobs). Fix: target bigipb's EXTERNAL self-IP 10
 instead — it appears nowhere in bigipa's config or device trust, and TMUI already serves
 on it with the existing `allow-service default` port lockdown (verified 200). One-line
 change: BIGIPB default in phase2-apm-dakota-rest.sh.
+
+## (12) Shadow façade VSs replace the external-self-IP portal target (security)
+Deviation 10 pointed the bigipb bookmark at the EXTERNAL self-IP 10.2.10.6 — that works,
+but it depends on TMUI being reachable on the external VLAN, which is exposure we do not
+want. Reworked to the shadow-VS pattern proven on the Nora build (bigip-apm-cert-ldap
+role, K31750304): portal resources target RFC5737 TEST-NET façades that are NOT in APM's
+reserved set — 192.0.2.5 ("bigipa TMUI", NEW bookmark) and 192.0.2.6 ("bigipb TMUI") —
+and plain LTM shadow VSs on those IPs (TCP-only, TLS passthrough, all VLANs, snat automap)
+steer the last hop with an iRule `node`: 127.0.0.1:443 for A (= the unit serving the
+portal), bigipb internal self-IP 10.2.20.6:443 for B (VLAN 73 only; the APM reserved
+check does not apply to LTM steering). A pool cannot hold a self-IP member, hence `node`;
+needs tmm.tcl.rule.node.allow_loopback_addresses=true (build sets it). Both session-pin
+knobs (sys db httpd.matchclient, sys httpd auth-pam-validate-ip) must be off on both
+units for proxied TMUI sessions to survive — set 2026-07-27. FOLLOW-UP: with nothing
+depending on external-VLAN TMUI anymore, tighten ext self-IP allow-service (operator).
