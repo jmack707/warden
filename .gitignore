@@ -8,3 +8,4 @@ certs/**/*.p12
 certs/san.cnf
 *.log
 initdb.sql
+openbao/.openbao-keys.json
