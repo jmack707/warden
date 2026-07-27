@@ -111,3 +111,58 @@ needs tmm.tcl.rule.node.allow_loopback_addresses=true (build sets it). Both sess
 knobs (sys db httpd.matchclient, sys httpd auth-pam-validate-ip) must be off on both
 units for proxied TMUI sessions to survive — set 2026-07-27. FOLLOW-UP: with nothing
 depending on external-VLAN TMUI anymore, tighten ext self-IP allow-service (operator).
+
+## (11) TMUI session-pinning must be OFF for proxied portal sessions
+The GUI "Require A Consistent Inbound IP For the Entire Web Session" = sys db
+`httpd.matchclient`; the related PAM check is sys httpd `auth-pam-validate-ip`. bigipa's
+portal engine SNAT-automaps its fetch to TMUI (source alternates across the internal
+self-IPs on parallel connections), so with either check ON, TMUI drops the SSO'd session
+mid-flight. Both set to off/false on BOTH units (2026-07-27) + config saved. Serial curl
+never trips this; a browser's parallel connections do — verify in a real browser.
+
+## (13) Authorization moved APM → BIG-IP remote-role (operator request)
+Requirement: any valid cert identity reaches the webtop/TMUI; the BIG-IP decides the role
+(bigip-admins → admin, everyone else → read-only). Changes:
+- APM aaa-ldap filter `(&(uid=..)(memberOf=..))` → identity-only `(uid=%{session.custom.cn})`.
+- BIG-IP `auth remote-user default-role` no-access → **guest** (read-only) on BOTH units
+  (device-local; not synced) + saved. `remote-role pua_admins` (employeeType=pua-admins →
+  administrator) unchanged. This IS group-based authz: bigip-admins members carry the
+  employeeType stamp on their ou=users access account — no check-roles-group/group-dn needed.
+- New non-admin access account uid=bob.user,ou=users (NO employeeType) + OpenBao static role.
+Verified via bigipb /var/log/secure pam_bigip_authz: alice → role 0 (Administrator),
+bob → level=Guest. NOTE: F5 Guest role is DENIED iControl REST by design (REST probe = 401)
+— that is not a failure; Guest gets read-only TMUI. Test the role via the pam_audit
+"level=" log line, not a REST call.
+
+## (14) External self-IP lockdown (deviation-12 follow-up, DONE)
+With portal delivery now via internal-VLAN shadow façades, nothing needs TMUI/SSH on the
+external VLAN. Set `allow-service` to none (empty list via REST — the string "none" is
+rejected; PATCH `{"allowService":[]}`) on external-self and ext_float, BOTH units + saved.
+Verified: TMUI+SSH now closed on 10.2.10.5/.6/.7; internal portal path (10.2.20.6) still
+200. HA is unaffected (configsync/mirror/unicast all live on the internal VLAN).
+
+## (15) revoke-all.sh — real 21.1 teardown mechanisms (un-stubbed)
+- APM session cut: there is NO clean `/mgmt/tm/apm/access-session` REST route on 21.1;
+  the working verb is `sessiondump --delete <key>` (or `--delete all`) via util/bash.
+  `sessiondump --list` enumerates keys; the script discovers a CN's key(s) by grepping
+  session vars. `tmsh show apm access-session` does NOT exist on 21.1.
+- Guac cut: Guacamole 1.6 kills an active connection with **PATCH** `.../activeConnections`
+  body `[{"op":"remove","path":"/<uuid>"}]` (NOT DELETE); needs an admin token from
+  POST /api/tokens.
+- Credential cut: static-role flow rotates (`ldap/rotate-role/<CN>`); ephemeral flow revokes
+  the lease. Nora wrapper `bigip/run-revoke.sh` fetches BIGIP_PASS via AppRole and pipes it
+  over ssh stdin. GOTCHA: revoke-all sources .env (BIGIP_PASS empty there by design) — it
+  preserves an injected BIGIP_PASS across the source, same guard as the APM build.
+
+## (16) OpenBao dev → production (persisted, sealed, auto-unseal)
+Swapped `server -dev` (in-memory, lost on recreate) for raft integrated storage via
+`docker-compose.prod.yml` + `openbao/openbao-prod.hcl`. Gotchas: this OpenBao 2.x build
+DROPPED `disable_mlock` (any value = fatal config error — omit it); a fresh raft/log volume
+is root-owned but the image runs as uid 100 (crash: "vault.db: permission denied") so the
+volumes are chowned 100:1000 (codified in openbao-init-unseal.sh); compose merges env, so
+BAO_DEV_* must be blanked in the override, not omitted. Seal lifecycle: init 1/1, keys +
+root token in openbao/.openbao-keys.json (0600, gitignored), .env BAO_TOKEN auto-updated.
+AUTO-unseal custody: deploy/openbao-unseal.service (systemd, enabled) unseals ~15s post-boot.
+Persistence VERIFIED (container restart preserved the static roles). Full runbook +
+rollback in OPENBAO-PROD.md. Listener stays HTTP on the internal VLAN (TLS = tracked
+follow-on — it cascades into the APM iRule sideband + scoped-token flow).

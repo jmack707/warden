@@ -1,5 +1,9 @@
 # PUA-OSS — Two-Phase Build & Deploy Runbook (v3, Claude Code edition)
 
+> **AS-BUILT:** this is the original build plan. For what is actually deployed now
+> (deviations 1–16 applied), see **ARCHITECTURE.md**; per-change rationale in DEVIATIONS.md.
+
+
 > Task labels: **[AGENT]** (Claude Code executes), **[AGENT-IF-ACCESS]** (executable
 > only with BIG-IP creds/reachability, else emit commands), **[HUMAN]** (GUI/judgment).
 > Do not proceed past a **GATE** until its checks pass. Dakota-specific parameter
