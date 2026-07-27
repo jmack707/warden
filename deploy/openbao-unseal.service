@@ -1,0 +1,14 @@
+[Unit]
+Description=Auto-unseal PUA OpenBao after boot (raft-persisted; operator chose AUTO custody)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# give docker + the openbao container (restart=unless-stopped) time to come up
+ExecStartPre=/bin/sleep 15
+ExecStart=/root/pua-oss/scripts/openbao-init-unseal.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

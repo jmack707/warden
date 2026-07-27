@@ -1,5 +1,12 @@
 # OpenBao — dev → production (persisted, sealed) migration
 
+> **STATUS: cutover EXECUTED 2026-07-27, AUTO-unseal custody.** Raft store live and
+> persistence-verified (container restart preserved the static roles). Unseal key +
+> root token in `openbao/.openbao-keys.json` (0600, gitignored) on the VM; boot-time
+> `openbao-unseal.service` (systemd, enabled) self-unseals after a reboot. The steps
+> below are the reusable runbook / rollback reference.
+
+
 The PoC ran OpenBao in `-dev` mode: in-memory storage, fixed root token `root`, auto-unsealed,
 HTTP. State was lost on any container **recreate** (every rebuild re-ran the configure scripts).
 Production swaps in **integrated raft storage** so state persists across restart *and* recreate,
@@ -38,10 +45,12 @@ After this, a container **recreate no longer wipes state** — you only re-run
 ## Key custody — PICK ONE (this is the security decision)
 `operator init` prints unseal key(s) + the root token; the script saves them to
 `openbao/.openbao-keys.json` (0600, gitignored).
-- **AUTO-unseal (lab-pragmatic):** leave the key file on the VM and run
-  `openbao-init-unseal.sh` at boot (add a compose healthcheck or a systemd unit) so the
-  stack self-recovers after a reboot. Trade-off: an attacker with root on the VM can unseal.
-  Acceptable when the VM itself is the trust boundary.
+- **AUTO-unseal (lab-pragmatic) — CHOSEN & WIRED:** the key file stays on the VM and
+  `deploy/openbao-unseal.service` (installed at `/etc/systemd/system/`, enabled) runs
+  `openbao-init-unseal.sh` ~15 s after boot so the stack self-recovers after a reboot.
+  Trade-off: an attacker with root on the VM can unseal. Acceptable when the VM itself is
+  the trust boundary. To switch to MANUAL later: `systemctl disable --now openbao-unseal`,
+  copy the keys off, `rm openbao/.openbao-keys.json`.
 - **MANUAL unseal (most secure):** copy the keys OFF the VM, `rm openbao/.openbao-keys.json`,
   and unseal by hand after each restart. No unattended boot.
 - Raise `SHARES`/`THRESHOLD` (e.g. `SHARES=5 THRESHOLD=3 ./scripts/openbao-init-unseal.sh`)
