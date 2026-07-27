@@ -16,7 +16,11 @@
 # Needs .env: BAO_TOKEN, BIGIP_MGMT/USER/PASS, LAB_HOST_IP, GUAC_ADMIN_PW. Runs on the VM.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# preserve a runtime-injected BIGIP_PASS (the Nora wrapper pipes it in) across the .env
+# source — .env ships BIGIP_PASS empty on purpose (the admin secret isn't stored on the VM).
+_PASS_IN="${BIGIP_PASS:-}"
 set -a; . "${HERE}/../.env"; set +a
+[ -n "$_PASS_IN" ] && BIGIP_PASS="$_PASS_IN"
 
 CN=""; LEASE_ID=""; APM_KEY=""; GUAC_ID=""
 if [[ "${1:-}" == --* ]]; then
