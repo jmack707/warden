@@ -1,0 +1,53 @@
+# Three test principals for the cert -> group -> access matrix (fixtures).
+# Human identities live in ou=people (kept separate from the ephemeral OpenBao
+# accounts in ou=users). "BIG-IP Admin" = groupOfNames cn=bigip-admins,ou=groups.
+#
+#   alice.admin    valid cert   + member of bigip-admins   -> expect ADMIN
+#   bob.user       valid cert   + NOT a member             -> expect DENIED / no admin
+#   carol.expired  EXPIRED cert + member of bigip-admins   -> expect FAIL at cert check
+#                  (carol is intentionally IN the group, so the ONLY thing that stops
+#                   her is the expired certificate — isolates the cert-validation step)
+#
+# Apply after the memberof overlay:
+#   envsubst < ldap/test-users.ldif | ldapadd -x -H ldap://$LAB_HOST_IP -D cn=admin,$BASE_DN -w $LDAP_ADMIN_PW
+dn: ou=people,dc=pua,dc=lab
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=pua,dc=lab
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=alice.admin,ou=people,dc=pua,dc=lab
+objectClass: inetOrgPerson
+uid: alice.admin
+cn: alice.admin
+sn: Admin
+givenName: Alice
+mail: alice.admin@pua.lab
+userPassword: ${TEST_USER_PW}
+
+dn: uid=bob.user,ou=people,dc=pua,dc=lab
+objectClass: inetOrgPerson
+uid: bob.user
+cn: bob.user
+sn: User
+givenName: Bob
+mail: bob.user@pua.lab
+userPassword: ${TEST_USER_PW}
+
+dn: uid=carol.expired,ou=people,dc=pua,dc=lab
+objectClass: inetOrgPerson
+uid: carol.expired
+cn: carol.expired
+sn: Expired
+givenName: Carol
+mail: carol.expired@pua.lab
+userPassword: ${TEST_USER_PW}
+
+dn: cn=bigip-admins,ou=groups,dc=pua,dc=lab
+objectClass: groupOfNames
+cn: bigip-admins
+description: BIG-IP Admin — members map to the administrator role
+member: uid=alice.admin,ou=people,dc=pua,dc=lab
+member: uid=carol.expired,ou=people,dc=pua,dc=lab

@@ -1,0 +1,23 @@
+# Enable the memberof (+ refint) overlay on the mdb database so members of a
+# groupOfNames automatically get a reverse `memberOf` attribute — which the BIG-IP
+# remote-role and the APM front-door policy branch on for group-based access.
+# Modules memberof/refint are already loaded by osixia; this adds the overlays.
+# Apply BEFORE creating the group (memberOf is only populated for changes made
+# after the overlay is active):
+#   docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// -c < ldap/memberof-overlay.ldif
+dn: olcOverlay=memberof,olcDatabase={1}mdb,cn=config
+changetype: add
+objectClass: olcOverlayConfig
+objectClass: olcMemberOf
+olcOverlay: memberof
+olcMemberOfRefint: TRUE
+olcMemberOfGroupOC: groupOfNames
+olcMemberOfMemberAD: member
+olcMemberOfMemberOfAD: memberOf
+
+dn: olcOverlay=refint,olcDatabase={1}mdb,cn=config
+changetype: add
+objectClass: olcOverlayConfig
+objectClass: olcRefintConfig
+olcOverlay: refint
+olcRefintAttribute: memberof member
