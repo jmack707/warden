@@ -155,7 +155,7 @@ tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ssocreds"),partition:"Common",
   agents:[{name:($p+"_act_ssocreds_ag"),partition:"Common",type:"variable-assign"}],
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_ssomap")}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ssomap"),partition:"Common",caption:"SSO Credential Mapping",color:1,itemType:"action",loop:"false",
-  agents:[{name:($p+"_act_ssomap_ag"),partition:"Common",type:"sso-cred-mapping"}],
+  agents:[{name:($p+"_act_ssomap_ag"),partition:"Common",type:"variable-assign"}],
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_resourceassign")}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_resourceassign"),partition:"Common",caption:"Resource Assign",color:1,itemType:"action",loop:"false",
   agents:[{name:($p+"_act_resourceassign_ag"),partition:"Common",type:"resource-assign"}],
