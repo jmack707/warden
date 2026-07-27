@@ -1,0 +1,15 @@
+# Privileged access accounts (ou=users) — the accounts a remote BIG-IP actually
+# validates the injected credential against. Named for the cert identity (uid=<CN>),
+# stamped employeeType=pua-admins so the remote BIG-IP remote-role grants administrator.
+# OpenBao owns/rotates the userPassword (see scripts/configure-openbao-static.sh) — the
+# initial value here is a throwaway that gets rotated immediately.
+#
+# Separate from the ou=people identity entry (which drives the APM group decision): this
+# is the privileged *access* account, per the PUA identity/privilege split.
+dn: uid=alice.admin,ou=users,dc=pua,dc=lab
+objectClass: inetOrgPerson
+uid: alice.admin
+cn: alice.admin
+sn: PrivilegedAccount
+employeeType: pua-admins
+userPassword: rotate-me-immediately
