@@ -1,49 +1,34 @@
-#-----------------------------------------------------------------------------
-# Dakota APM OpenBao fetch — Stage B1. Fired by an "iRule Event" agent (id
-# 'openbao_fetch') on the Allow path AFTER the group-gated LDAP query. For the
-# session's CN it rotates the OpenBao static role (fresh one-time password) then reads
-# it, and stashes it in session.custom.pua.password for the SSO Credentials agent.
-#
-# Scoped token comes from the string datagroup `pua_openbao_dg` (record key `token`),
-# seeded by the build. TMM reaches OpenBao on the internal VLAN (10.2.20.30:8200).
-# PoC-grade: plaintext dev OpenBao + regexp JSON. Harden (TLS + iRulesLX JSON) for prod.
-#-----------------------------------------------------------------------------
 when ACCESS_POLICY_AGENT_EVENT {
     if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
-        set cn  [ACCESS::session data get session.custom.cn]
+        set cn [ACCESS::session data get session.custom.cn]
         set tok [class lookup token pua_openbao_dg]
-        set node "10.2.20.30:8200"
-        set host "10.2.20.30"
+        if { $cn eq "" } { return }
+        if { $tok eq "" } { return }
 
-        if { $cn eq "" || $tok eq "" } {
-            ACCESS::session data set session.custom.pua.fetch_err "missing-cn-or-token"
-            return
-        }
-
-        # 1) rotate -> fresh one-time password
-        set c [connect -timeout 3000 -idle 5 -status st $node]
+        set c [connect -timeout 3000 -idle 5 10.2.20.30:8200]
         if { $c ne "" } {
-            send -timeout 3000 $c "POST /v1/ldap/rotate-role/$cn HTTP/1.1\r\nHost: $host\r\nX-Vault-Token: $tok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            set r "POST /v1/ldap/rotate-role/$cn HTTP/1.1\r\nHost: 10.2.20.30\r\nX-Vault-Token: $tok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            send -timeout 3000 $c $r
             recv -timeout 3000 $c
             close $c
         }
 
-        # 2) read the current (just-rotated) credential
-        set c2 [connect -timeout 3000 -idle 5 -status st2 $node]
+        set c2 [connect -timeout 3000 -idle 5 10.2.20.30:8200]
         if { $c2 eq "" } {
             ACCESS::session data set session.custom.pua.fetch_err "connect-failed"
             return
         }
-        send -timeout 3000 $c2 "GET /v1/ldap/static-cred/$cn HTTP/1.1\r\nHost: $host\r\nX-Vault-Token: $tok\r\nConnection: close\r\n\r\n"
+        set g "GET /v1/ldap/static-cred/$cn HTTP/1.1\r\nHost: 10.2.20.30\r\nX-Vault-Token: $tok\r\nConnection: close\r\n\r\n"
+        send -timeout 3000 $c2 $g
         set resp ""
-        while { 1 } {
-            set d [recv -timeout 3000 $c2]
-            if { $d eq "" } { break }
-            append resp $d
+        for { set i 0 } { $i < 16 } { incr i } {
+            set chunk [recv -timeout 2000 $c2]
+            if { $chunk eq "" } { break }
+            append resp $chunk
         }
         close $c2
 
-        if { [regexp {"password"\s*:\s*"([^"]+)"} $resp -> pw] } {
+        if { [regexp {"password":"([^"]+)"} $resp all pw] } {
             ACCESS::session data set session.custom.pua.password $pw
         } else {
             ACCESS::session data set session.custom.pua.fetch_err "parse-failed"
