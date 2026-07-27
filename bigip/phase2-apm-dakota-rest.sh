@@ -32,6 +32,11 @@ BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
 VIP_IP="${APM_TEST_VIP:-10.2.20.50}"
 BIGIPB="${APM_TARGET_TMUI:-10.2.20.6}"            # remote BIG-IP TMUI (bigipb peer self-IP)
+REFERER_IRULE='when HTTP_REQUEST {
+    if { [HTTP::uri] contains "tmui/login.jsp" } {
+        HTTP::header remove "Referer"
+    }
+}'
 
 step(){ echo; echo "== $* =="; }
 # additive POST tolerating 409 (already exists)
@@ -73,6 +78,7 @@ td "$B/mgmt/tm/apm/resource/webtop/~${PART}~${P}-webtop"
 td "$B/mgmt/tm/apm/sso/form-based/~${PART}~${P}-tmui-sso"
 td "$B/mgmt/tm/apm/profile/connectivity/~${PART}~${P}-connectivity"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
+td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-referer-strip"
 td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
 
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
@@ -120,6 +126,12 @@ add "$B/mgmt/tm/apm/resource/webtop" "$(jq -n --arg n "${P}-webtop" --arg cg "/$
 add "$B/mgmt/tm/apm/resource/portal-access" "$(jq -n --arg n "${P}-bigipb-tmui" --arg h "$BIGIPB" --arg sso "/$PART/${P}-tmui-sso" \
   '{name:$n,partition:"Common",aclOrder:1,publishOnWebtop:"true",applicationUri:("https://"+$h+"/tmui/login.jsp"),
     items:{item1:{host:$h,paths:"/*",scheme:"https",port:443,sso:$sso}}}')"
+# portal item headers (destipaddr = PUA node-selection, referer = TMUI login.jsp CSRF) —
+# a header_data_t the REST body can't express; tmsh sets it. `items modify` merges.
+curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
+  -d "$(jq -n --arg u "-c 'tmsh modify apm resource portal-access ${P}-bigipb-tmui items modify { item1 { headers { { name destipaddr value ${BIGIPB} } { name referer value https://${BIGIPB}:443 } } } }'" '{command:"run",utilCmdArgs:$u}')" | jq -r '.commandResult // "  portal item headers set"'
+# Referer-strip iRule: TMUI login.jsp rejects a mismatched Referer (CSRF) — remove it
+add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-referer-strip" --arg b "$REFERER_IRULE" '{name:$n,partition:"Common",apiAnonymous:$b}')"
 # connectivity profile (Portal Access requires one on the VS)
 add "$B/mgmt/tm/apm/profile/connectivity" "$(jq -n --arg n "${P}-connectivity" '{name:$n,partition:"Common",defaultsFrom:"/Common/connectivity"}')"
 # SSO Credential Mapping agent (engages websso; forwards the sso.token.last.* vars)
@@ -176,10 +188,10 @@ curl "${A[@]}" -o /tmp/apm.out -w '  commit -> %{http_code}\n' -X PATCH -H 'Cont
 grep -q '"state":"COMPLETED"' /tmp/apm.out || { echo "  $(cat /tmp/apm.out)"; }
 
 step "6. test virtual server ${VIP_IP}:443 (client-ssl + access profile)"
-add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" --arg cp "/$PART/${P}-connectivity" \
+add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" --arg rs "/$PART/${P}-referer-strip" --arg cp "/$PART/${P}-connectivity" \
   '{name:$n,partition:"Common",destination:$d,mask:"255.255.255.255",ipProtocol:"tcp",
     profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:$ap},{name:$cp},{name:"/Common/rewrite-portal"}],
-    rules:[$ir],
+    rules:[$ir,$rs],
     sourceAddressTranslation:{type:"automap"}}')"
 
 echo; echo "Done. Test:  curl -k --cert certs/clients/<uid>.crt --key certs/clients/<uid>.key https://${VIP_IP}/  ; then read /var/log/apm"
