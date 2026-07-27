@@ -31,6 +31,7 @@ PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
 VIP_IP="${APM_TEST_VIP:-10.2.20.50}"
+BIGIPB="${APM_TARGET_TMUI:-10.2.20.6}"            # remote BIG-IP TMUI (bigipb peer self-IP)
 
 step(){ echo; echo "== $* =="; }
 # additive POST tolerating 409 (already exists)
@@ -57,14 +58,20 @@ td(){ curl "${A[@]}" -o /dev/null -w "  DEL ${1##*~} -> %{http_code}\n" -X DELET
 td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-test-vs"
 td "$B/mgmt/tm/apm/profile/access/~${PART}~${P}"
 td "$B/mgmt/tm/apm/policy/access-policy/~${PART}~${P}"
-for it in ent act_certauth act_varassign act_ldapquery act_groupcheck act_baofetch act_ssocreds end_allow end_deny; do
+for it in ent act_certauth act_varassign act_ldapquery act_groupcheck act_baofetch act_ssocreds act_ssomap act_resourceassign end_allow end_deny; do
   td "$B/mgmt/tm/apm/policy/policy-item/~${PART}~${P}_${it}"; done
 td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_varassign_ag"
 td "$B/mgmt/tm/apm/policy/agent/aaa-ldap/~${PART}~${P}_act_ldapquery_ag"
 td "$B/mgmt/tm/apm/policy/agent/irule-event/~${PART}~${P}_act_baofetch_ag"
 td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssocreds_ag"
+td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssomap_ag"
+td "$B/mgmt/tm/apm/policy/agent/resource-assign/~${PART}~${P}_act_resourceassign_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-allow/~${PART}~${P}_end_allow_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-deny/~${PART}~${P}_end_deny_ag"
+td "$B/mgmt/tm/apm/resource/portal-access/~${PART}~${P}-bigipb-tmui"
+td "$B/mgmt/tm/apm/resource/webtop/~${PART}~${P}-webtop"
+td "$B/mgmt/tm/apm/sso/form-based/~${PART}~${P}-tmui-sso"
+td "$B/mgmt/tm/apm/profile/connectivity/~${PART}~${P}-connectivity"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
 td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
 
@@ -99,6 +106,31 @@ add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_sso
      {varname:"session.sso.token.last.username",expression:"mcget {session.custom.cn}"},
      {varname:"session.sso.token.last.password",expression:"mcget {session.custom.pua.password}",secure:"true"}]}')"
 
+step "4c. delivery objects: SSO form + webtop + Portal Access to bigipb + cred-map/resource-assign (Stage B2)"
+# anti-SSRF: allow the Portal Access proxy to reach an RFC1918/self target
+curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
+  -d '{"command":"run","utilCmdArgs":"-c \"tmsh modify sys db tmm.tcl.rule.connect.allow_loopback_addresses value true; tmsh modify sys db tmm.tcl.rule.node.allow_loopback_addresses value true; echo db-flags-set\""}' | jq -r '.commandResult // "(ok)"'
+# form-based SSO into the target TMUI login page
+add "$B/mgmt/tm/apm/sso/form-based" "$(jq -n --arg n "${P}-tmui-sso" \
+  '{name:$n,partition:"Common",startUri:"/tmui/login.jsp*",formAction:"/tmui/logmein.html",formUsername:"username",formPassword:"passwd",formMethod:"post",successMatchType:"url",successMatchValue:"/"}')"
+# webtop (full) + its customization group
+add "$B/mgmt/tm/apm/policy/customization-group" "$(jq -n --arg n "${P}_webtop_cg" '{name:$n,partition:"Common",source:"/Common/modern",type:"webtop"}')"
+add "$B/mgmt/tm/apm/resource/webtop" "$(jq -n --arg n "${P}-webtop" --arg cg "/$PART/${P}_webtop_cg" '{name:$n,partition:"Common",customizationGroup:$cg,webtopType:"full"}')"
+# Portal Access resource -> bigipb TMUI, with form SSO bound on the item
+add "$B/mgmt/tm/apm/resource/portal-access" "$(jq -n --arg n "${P}-bigipb-tmui" --arg h "$BIGIPB" --arg sso "/$PART/${P}-tmui-sso" \
+  '{name:$n,partition:"Common",aclOrder:1,publishOnWebtop:"true",applicationUri:("https://"+$h+"/tmui/login.jsp"),
+    items:{item1:{host:$h,paths:"/*",scheme:"https",port:443,sso:$sso}}}')"
+# connectivity profile (Portal Access requires one on the VS)
+add "$B/mgmt/tm/apm/profile/connectivity" "$(jq -n --arg n "${P}-connectivity" '{name:$n,partition:"Common",defaultsFrom:"/Common/connectivity"}')"
+# SSO Credential Mapping agent (engages websso; forwards the sso.token.last.* vars)
+add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_ssomap_ag" \
+  '{name:$n,partition:"Common",type:"sso-cred-mapping",variables:[
+     {varname:"session.sso.token.last.username",expression:"mcget {session.sso.token.last.username}"},
+     {varname:"session.sso.token.last.password",expression:"mcget {session.sso.token.last.password}"}]}')"
+# Resource Assign agent (webtop + the portal-access bookmark)
+add "$B/mgmt/tm/apm/policy/agent/resource-assign" "$(jq -n --arg n "${P}_act_resourceassign_ag" --arg wt "/$PART/${P}-webtop" --arg pa "/$PART/${P}-bigipb-tmui" \
+  '{name:$n,partition:"Common",type:"general",rules:[{portalAccessResources:[$pa],webtop:$wt}]}')"
+
 step "5. policy graph (one transaction)"
 TID=$(curl "${A[@]}" -X POST -H 'Content-Type: application/json' -d '{}' "$B/mgmt/tm/transaction" | jq -r '.transId')
 echo "  transId=$TID"
@@ -121,6 +153,12 @@ tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_baofetch"),partition:"Common",
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_ssocreds")}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ssocreds"),partition:"Common",caption:"SSO Credentials",color:1,itemType:"action",loop:"false",
   agents:[{name:($p+"_act_ssocreds_ag"),partition:"Common",type:"variable-assign"}],
+  rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_ssomap")}]}')"
+tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ssomap"),partition:"Common",caption:"SSO Credential Mapping",color:1,itemType:"action",loop:"false",
+  agents:[{name:($p+"_act_ssomap_ag"),partition:"Common",type:"sso-cred-mapping"}],
+  rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_resourceassign")}]}')"
+tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_resourceassign"),partition:"Common",caption:"Resource Assign",color:1,itemType:"action",loop:"false",
+  agents:[{name:($p+"_act_resourceassign_ag"),partition:"Common",type:"resource-assign"}],
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_end_allow")}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_varassign"),partition:"Common",caption:"Extract CN",color:1,itemType:"action",loop:"false",
   agents:[{name:($p+"_act_varassign_ag"),partition:"Common",type:"variable-assign"}],
@@ -131,16 +169,16 @@ tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_certauth"),partition:"Common",
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_ent"),partition:"Common",caption:"Start",color:1,itemType:"entry",loop:"false",
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_certauth")}]}')"
 tadd "$B/mgmt/tm/apm/policy/access-policy/" "$(jq -n --arg p "$P" '{name:$p,partition:"Common",type:"access-policy",startItem:($p+"_ent"),defaultEnding:($p+"_end_allow"),maxMacroLoopCount:1,oneshotMacro:"false",
-  items:[{name:($p+"_ent"),partition:"Common"},{name:($p+"_act_certauth"),partition:"Common"},{name:($p+"_act_varassign"),partition:"Common"},{name:($p+"_act_ldapquery"),partition:"Common"},{name:($p+"_act_baofetch"),partition:"Common"},{name:($p+"_act_ssocreds"),partition:"Common"},{name:($p+"_end_allow"),partition:"Common"},{name:($p+"_end_deny"),partition:"Common"}]}')"
+  items:[{name:($p+"_ent"),partition:"Common"},{name:($p+"_act_certauth"),partition:"Common"},{name:($p+"_act_varassign"),partition:"Common"},{name:($p+"_act_ldapquery"),partition:"Common"},{name:($p+"_act_baofetch"),partition:"Common"},{name:($p+"_act_ssocreds"),partition:"Common"},{name:($p+"_act_ssomap"),partition:"Common"},{name:($p+"_act_resourceassign"),partition:"Common"},{name:($p+"_end_allow"),partition:"Common"},{name:($p+"_end_deny"),partition:"Common"}]}')"
 tadd "$B/mgmt/tm/apm/profile/access/" "$(jq -n --arg p "$P" '{name:$p,partition:"Common",acceptLanguages:["en"],defaultLanguage:"en",accessPolicy:("/Common/"+$p),customizationGroup:("/Common/"+$p+"_logout"),epsGroup:("/Common/"+$p+"_eps"),errormapGroup:("/Common/"+$p+"_errormap"),frameworkInstallationGroup:("/Common/"+$p+"_framework_installation"),generalUiGroup:("/Common/"+$p+"_general_ui"),type:"all",scope:"profile",accessPolicyTimeout:300,inactivityTimeout:900,maxSessionTimeout:604800,logoutUriTimeout:5,maxConcurrentSessions:0,maxInProgressSessions:128,maxFailureDelay:5,minFailureDelay:2,secureCookie:"true",persistentCookie:"false",restrictToSingleClientIp:"false",userIdentityMethod:"http",logSettings:["/Common/default-log-setting"]}')"
 echo "  committing transaction..."
 curl "${A[@]}" -o /tmp/apm.out -w '  commit -> %{http_code}\n' -X PATCH -H 'Content-Type: application/json' -d '{"state":"VALIDATING"}' "$B/mgmt/tm/transaction/$TID"
 grep -q '"state":"COMPLETED"' /tmp/apm.out || { echo "  $(cat /tmp/apm.out)"; }
 
 step "6. test virtual server ${VIP_IP}:443 (client-ssl + access profile)"
-add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" \
+add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" --arg cp "/$PART/${P}-connectivity" \
   '{name:$n,partition:"Common",destination:$d,mask:"255.255.255.255",ipProtocol:"tcp",
-    profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:$ap}],
+    profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:$ap},{name:$cp},{name:"/Common/rewrite-portal"}],
     rules:[$ir],
     sourceAddressTranslation:{type:"automap"}}')"
 
