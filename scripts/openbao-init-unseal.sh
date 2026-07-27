@@ -20,6 +20,14 @@ KEYS="${HERE}/../openbao/.openbao-keys.json"
 SHARES="${SHARES:-1}"; THRESHOLD="${THRESHOLD:-1}"
 bao(){ docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 openbao bao "$@"; }
 
+# The openbao image runs as uid 100 / gid 1000; a freshly-created raft/log volume is
+# root-owned, so the server crash-loops on "vault.db: permission denied". Fix perms up
+# front (idempotent — a no-op once owned). Named per the compose project prefix.
+for vol in pua-oss_openbaodata pua-oss_openbaologs; do
+  docker volume inspect "$vol" >/dev/null 2>&1 && \
+    docker run --rm -v "${vol}:/v" busybox chown -R 100:1000 /v >/dev/null 2>&1 || true
+done
+
 status_json(){ bao status -format=json 2>/dev/null || true; }
 initialized(){ echo "$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("initialized",False))' 2>/dev/null; }
 sealed(){ echo "$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sealed",True))' 2>/dev/null; }
@@ -50,4 +58,4 @@ if [ "$(sealed "$S")" = "True" ]; then
 else
   echo "== already unsealed — nothing to do =="
 fi
-bao status -format=json | python3 -c 'import sys,json;d=json.load(sys.stdin);print(f"  initialized={d[\"initialized\"]} sealed={d[\"sealed\"]}")'
+bao status -format=json | python3 -c 'import sys,json;d=json.load(sys.stdin);print("  status:",{k:d.get(k) for k in ("initialized","sealed")})'

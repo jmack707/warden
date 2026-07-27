@@ -8,7 +8,9 @@
 # deliberate follow-on (it cascades into the iRule + scoped-token flow) — tracked separately.
 
 ui = true
-disable_mlock = false           # container has IPC_LOCK; keep secrets out of swap
+# NOTE: this OpenBao 2.x build DROPPED support for `disable_mlock` — setting it (any value)
+# is a fatal config error. mlock is no longer used; protect secrets by disabling/encrypting
+# host swap instead. Do not re-add a disable_mlock line.
 
 storage "raft" {
   path    = "/openbao/data"     # persisted volume (see docker-compose.prod.yml)

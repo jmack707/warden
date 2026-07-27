@@ -4,7 +4,10 @@
 # Only the openbao service changes; openldap/guac inherit from the base compose.
 services:
   openbao:
-    environment: {}                               # drop BAO_DEV_* — no dev mode
+    # blank the base file's BAO_DEV_* (compose merges env, so we must override, not omit)
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: ""
+      BAO_DEV_LISTEN_ADDRESS: ""
     command: server -config=/pua/openbao-prod.hcl # boots SEALED; run openbao-init-unseal.sh
     volumes:
       - ./openbao:/pua:ro
