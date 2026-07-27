@@ -190,7 +190,7 @@ grep -q '"state":"COMPLETED"' /tmp/apm.out || { echo "  $(cat /tmp/apm.out)"; }
 step "6. test virtual server ${VIP_IP}:443 (client-ssl + access profile)"
 add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" --arg rs "/$PART/${P}-referer-strip" --arg cp "/$PART/${P}-connectivity" \
   '{name:$n,partition:"Common",destination:$d,mask:"255.255.255.255",ipProtocol:"tcp",
-    profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:$ap},{name:$cp},{name:"/Common/rewrite-portal"}],
+    profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:"/Common/serverssl",context:"serverside"},{name:$ap},{name:$cp},{name:"/Common/rewrite-portal"},{name:"/Common/rba"},{name:"/Common/ppp"},{name:"/Common/websso"}],
     rules:[$ir,$rs],
     sourceAddressTranslation:{type:"automap"}}')"
 
