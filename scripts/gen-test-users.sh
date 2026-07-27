@@ -41,6 +41,10 @@ EOF
       -days 365 -extfile "$CLIENTS/$uid.ext" -out "$CLIENTS/$uid.crt" 2>/dev/null
   fi
   chmod 0644 "$CLIENTS/$uid.crt"; chmod 0600 "$CLIENTS/$uid.key"
+  # PKCS12 bundle for browser import (password: pua) — see scripts/import-browser-certs.sh
+  openssl pkcs12 -export -inkey "$CLIENTS/$uid.key" -in "$CLIENTS/$uid.crt" \
+    -certfile "$CERTS/ca.crt" -name "PUA $uid" -out "$CLIENTS/$uid.p12" -passout pass:pua 2>/dev/null
+  chmod 0600 "$CLIENTS/$uid.p12"
 }
 gen_client alice.admin   valid
 gen_client bob.user      valid
