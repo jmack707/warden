@@ -31,7 +31,7 @@ PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
 VIP_IP="${APM_TEST_VIP:-10.2.20.50}"
-BIGIPB="${APM_TARGET_TMUI:-10.2.20.6}"            # remote BIG-IP TMUI (bigipb peer self-IP)
+BIGIPB="${APM_TARGET_TMUI:-10.2.10.6}"            # remote BIG-IP TMUI via bigipb EXTERNAL self-IP — NOT 10.2.20.6: that is bigipb's configsync/mirror/failover addr in device trust, so bigipa APM rejects it as "reserved address" (01490585, errorcode=17)
 REFERER_IRULE='when HTTP_REQUEST {
     if { [HTTP::uri] contains "tmui/login.jsp" } {
         HTTP::header remove "Referer"

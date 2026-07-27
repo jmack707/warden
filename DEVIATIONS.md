@@ -84,3 +84,15 @@ Per the runbook's standing instruction to record every deviation.
   `validate-phase1.sh` (step 5) and `gate1b-verify.sh` (step 4) now poll up to 10-12s.
   Operational note: revocation ends *future* logins with a small delay, not instantly —
   established sessions are still cut by Guacamole/APM session kill (runbook invariant 4).
+
+## (10) Portal Access target must not be a cluster address (APM reserved-address guard)
+Bookmark click died on `/vdesk/my.acl.php3?errorcode=17` with apm log
+`01490585 ... rejected because it points to reserved address`. APM portal access refuses
+to proxy to any address bigipa considers cluster-reserved: its own self-IPs and
+virtual-addresses, mgmt IPs, and the device-trust addresses of ALL cluster members
+(configsync/mirror/failover-unicast — see `tmsh list cm device`). 10.2.20.6 is bigipb's
+configsync+mirror+unicast address, hence rejected. No sys db override exists (swept sys db
+for reserved/rewrite/portal/apm knobs). Fix: target bigipb's EXTERNAL self-IP 10.2.10.6
+instead — it appears nowhere in bigipa's config or device trust, and TMUI already serves
+on it with the existing `allow-service default` port lockdown (verified 200). One-line
+change: BIGIPB default in phase2-apm-dakota-rest.sh.
