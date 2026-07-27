@@ -1,0 +1,51 @@
+{
+  "preset": "service",
+  "note": "Repository documentation standard, service preset. Single source of truth for 'required'. The linter (.github/scripts/doc_lint.py) is vendored from the repo-doc-standard skill when available; until then these requirements are enforced by review.",
+  "readme": {
+    "path": "README.md",
+    "max_lines": 120,
+    "required_sections": ["What & why", "Topology", "Quickstart", "Verification", "Documentation"]
+  },
+  "required_files": [
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "docs/architecture.md",
+    "docs/install.md",
+    "docs/deploy.md",
+    "docs/upgrade.md",
+    "docs/operations/troubleshooting.md",
+    "docs/reference/configuration.md",
+    "docs/reference/cli.md",
+    "docs/reference/api.md"
+  ],
+  "required_globs": [
+    "docs/adr/0001-*.md",
+    "docs/operations/runbooks/*.md"
+  ],
+  "sections": {
+    "docs/architecture.md": ["Components", "Trust boundaries", "Constraints"],
+    "docs/install.md": ["Prerequisites", "Steps", "Verification"],
+    "docs/deploy.md": ["Verification"],
+    "docs/upgrade.md": ["Rollback", "Teardown"],
+    "docs/operations/troubleshooting.md": ["Escalation"]
+  },
+  "adr": {
+    "dir": "docs/adr",
+    "required_sections": ["Status", "Context", "Decision", "Consequences"],
+    "immutable_once_accepted": true
+  },
+  "runbook": {
+    "dir": "docs/operations/runbooks",
+    "required_sections": ["Procedure", "Verification", "Rollback", "Escalation"]
+  },
+  "rules": {
+    "no_placeholders": ["TODO", "TBD", "FIXME"],
+    "placeholder_style": "<angle-bracket>",
+    "fenced_code_must_be_tagged": true,
+    "procedures_must_verify": true,
+    "currency_marker": "Last validated: YYYY-MM",
+    "currency_max_age_months": 12,
+    "commands_copy_pasteable": true,
+    "version_pin_tested": true
+  }
+}

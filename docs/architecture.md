@@ -1,8 +1,12 @@
-# PUA-OSS — As-Built Architecture (Dakota)
+# PUA-OSS — Architecture (Dakota)
 
-The living picture of what is actually deployed, as of 2026-07-27. RUNBOOK.md is the
+_Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x, OpenLDAP (osixia) 1.5.0,
+Guacamole 1.6.0._
+
+The living picture of what is actually deployed. [../RUNBOOK.md](../RUNBOOK.md) is the
 original two-phase build plan; this file records where the running system landed after
-deviations 1–16 (see DEVIATIONS.md for the why of each).
+deviations 1–16 ([../DEVIATIONS.md](../DEVIATIONS.md) for the why of each, distilled into
+[adr/](adr/)).
 
 ## Components
 | Host | Role |
@@ -56,8 +60,32 @@ APM/TMUI session), Guac PATCH-remove (live SSH tunnel).
   (VM-local key file + systemd unseal), VM is the trust boundary (deviation 16).
 - admin/root stay local on both BIG-IPs (never LDAP) — recovery path.
 
+## Trust boundaries
+- **Client → APM VIP (10.2.20.50):** authenticated by X.509 client cert (PUA Lab CA) with
+  `peerCertMode require`. An untrusted/expired cert fails at the TLS handshake — nothing
+  downstream runs.
+- **APM → OpenBao (:8200):** a least-privilege scoped token (policy `pua-apm-read`, reads
+  only `ldap/static-cred/*` + `ldap/rotate-role/*`), carried in an internal data-group.
+  HTTP, on the internal VLAN only.
+- **OpenBao → OpenLDAP:** OpenBao owns the `userPassword` of ou=users accounts and is the
+  only writer; the BIG-IP bind account can read attributes but not `userPassword`.
+- **VM host = trust boundary for OpenBao at rest:** AUTO-unseal keeps the unseal key in a
+  root-only file on the VM. Root on the VM can unseal OpenBao. Accepted for the lab.
+- **admin/root on both BIG-IPs are local, never LDAP** — the recovery path if the directory
+  or OpenBao is unavailable.
+
+## Constraints
+- APM AAA LDAP requires an LTM **pool** on 21.x (a bare server address is rejected).
+- `memberOf` is an operational attribute: not returned by a default LDAP query, but it can
+  be filtered on. (Authorization no longer relies on it — see [adr/0004](adr/0004-authorization-on-bigip-remote-role.md).)
+- APM Portal Access refuses to proxy to any cluster-reserved address (self-IPs, mgmt,
+  device-trust). Portal targets must be non-reserved façade IPs — see
+  [adr/0003](adr/0003-shadow-facade-portal-targets.md).
+- OpenBao 2.x dev mode is in-memory (lost on container recreate); production uses raft —
+  see [adr/0005](adr/0005-openbao-persisted-auto-unseal.md).
+
 ## Known follow-ons (not yet done)
 - OpenBao listener is HTTP on the internal VLAN; TLS on :8200 cascades into the APM iRule
-  sideband + scoped-token flow — deferred.
+  sideband + scoped-token flow — deferred (tracked in [upgrade.md](upgrade.md)).
 - Operator browser click-through of both bookmarks (alice full-admin, bob read-only) is the
-  last human confirmation.
+  last human confirmation — see [operations/runbooks/browser-verify.md](operations/runbooks/browser-verify.md).
