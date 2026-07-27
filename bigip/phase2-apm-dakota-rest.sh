@@ -18,6 +18,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 _PASS_IN="${BIGIP_PASS:-}"; set -a; . "${HERE}/../.env"; set +a
 [ -n "$_PASS_IN" ] && BIGIP_PASS="$_PASS_IN"
 : "${BIGIP_PASS:?export BIGIP_PASS}"; : "${BIND_PW:?need BIND_PW}"
+: "${APM_TOKEN:?export APM_TOKEN (scoped OpenBao token from scripts/mint-apm-token.sh)}"
+IRULE_FILE="${HERE}/apm-openbao-fetch-dakota.irule"
 
 B="https://${BIGIP_MGMT}"; A=(-sk -u "${BIGIP_USER}:${BIGIP_PASS}")
 P=pua-apm                      # object-name prefix / access-profile name
@@ -55,12 +57,16 @@ td(){ curl "${A[@]}" -o /dev/null -w "  DEL ${1##*~} -> %{http_code}\n" -X DELET
 td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-test-vs"
 td "$B/mgmt/tm/apm/profile/access/~${PART}~${P}"
 td "$B/mgmt/tm/apm/policy/access-policy/~${PART}~${P}"
-for it in ent act_certauth act_varassign act_ldapquery act_groupcheck end_allow end_deny; do
+for it in ent act_certauth act_varassign act_ldapquery act_groupcheck act_baofetch act_ssocreds end_allow end_deny; do
   td "$B/mgmt/tm/apm/policy/policy-item/~${PART}~${P}_${it}"; done
 td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_varassign_ag"
 td "$B/mgmt/tm/apm/policy/agent/aaa-ldap/~${PART}~${P}_act_ldapquery_ag"
+td "$B/mgmt/tm/apm/policy/agent/irule-event/~${PART}~${P}_act_baofetch_ag"
+td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssocreds_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-allow/~${PART}~${P}_end_allow_ag"
 td "$B/mgmt/tm/apm/policy/agent/ending-deny/~${PART}~${P}_end_deny_ag"
+td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
+td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
 
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
 add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_varassign_ag" \
@@ -80,6 +86,19 @@ for grp in logout:logout eps:eps errormap:errormap framework_installation:framew
   add "$B/mgmt/tm/apm/policy/customization-group" "$(jq -n --arg n "${P}_${n}" --arg t "$t" '{name:$n,partition:"Common",source:"/Common/modern",type:$t}')"
 done
 
+step "4b. OpenBao fetch (iRule + token datagroup) + fetch/SSO-creds agents (Stage B1)"
+# iRule that rotates+reads the CN's OpenBao static-cred and stashes the password
+add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-openbao-fetch" --rawfile b "$IRULE_FILE" '{name:$n,partition:"Common",apiAnonymous:$b}')"
+# scoped token datagroup for the iRule
+add "$B/mgmt/tm/ltm/data-group/internal" "$(jq -n --arg t "$APM_TOKEN" '{name:"pua_openbao_dg",partition:"Common",type:"string",records:[{name:"token",data:$t}]}')"
+# iRule Event agent (id must match the iRule's agent_id check)
+add "$B/mgmt/tm/apm/policy/agent/irule-event" "$(jq -n --arg n "${P}_act_baofetch_ag" '{name:$n,partition:"Common",id:"openbao_fetch"}')"
+# SSO Credentials agent: username = CN, password = the fetched OpenBao value
+add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_ssocreds_ag" \
+  '{name:$n,partition:"Common",variables:[
+     {varname:"session.sso.token.last.username",expression:"mcget {session.custom.cn}"},
+     {varname:"session.sso.token.last.password",expression:"mcget {session.custom.pua.password}",secure:"true"}]}')"
+
 step "5. policy graph (one transaction)"
 TID=$(curl "${A[@]}" -X POST -H 'Content-Type: application/json' -d '{}' "$B/mgmt/tm/transaction" | jq -r '.transId')
 echo "  transId=$TID"
@@ -91,11 +110,18 @@ tadd(){ # tadd <url> <json>
 PI="$B/mgmt/tm/apm/policy/policy-item/"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_end_allow"),partition:"Common",caption:"Allow",color:1,itemType:"ending",agents:[{name:($p+"_end_allow_ag"),partition:"Common",type:"ending-allow"}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_end_deny"),partition:"Common",caption:"Deny",color:2,itemType:"ending",agents:[{name:($p+"_end_deny_ag"),partition:"Common",type:"ending-deny"}]}')"
-# LDAP Query IS the gate now: Successful (queryresult==1) => valid user in bigip-admins
+# LDAP Query gate: Successful (queryresult==1) => valid user in bigip-admins -> fetch creds
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ldapquery"),partition:"Common",caption:"LDAP Query (uid + group)",color:1,itemType:"action",loop:"false",
   agents:[{name:($p+"_act_ldapquery_ag"),partition:"Common",type:"aaa-ldap"}],
-  rules:[{caption:"Successful",expression:"expr {[mcget {session.ldap.last.queryresult}] == 1}",nextItem:("/Common/"+$p+"_end_allow")},
+  rules:[{caption:"Successful",expression:"expr {[mcget {session.ldap.last.queryresult}] == 1}",nextItem:("/Common/"+$p+"_act_baofetch")},
          {caption:"fallback",nextItem:("/Common/"+$p+"_end_deny")}]}')"
+# OpenBao fetch (iRule Event) -> SSO Credentials -> Allow
+tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_baofetch"),partition:"Common",caption:"OpenBao Fetch",color:1,itemType:"action",loop:"false",
+  agents:[{name:($p+"_act_baofetch_ag"),partition:"Common",type:"irule-event"}],
+  rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_ssocreds")}]}')"
+tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_ssocreds"),partition:"Common",caption:"SSO Credentials",color:1,itemType:"action",loop:"false",
+  agents:[{name:($p+"_act_ssocreds_ag"),partition:"Common",type:"variable-assign"}],
+  rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_end_allow")}]}')"
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_varassign"),partition:"Common",caption:"Extract CN",color:1,itemType:"action",loop:"false",
   agents:[{name:($p+"_act_varassign_ag"),partition:"Common",type:"variable-assign"}],
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_ldapquery")}]}')"
@@ -105,16 +131,17 @@ tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_act_certauth"),partition:"Common",
 tadd "$PI" "$(jq -n --arg p "$P" '{name:($p+"_ent"),partition:"Common",caption:"Start",color:1,itemType:"entry",loop:"false",
   rules:[{caption:"fallback",nextItem:("/Common/"+$p+"_act_certauth")}]}')"
 tadd "$B/mgmt/tm/apm/policy/access-policy/" "$(jq -n --arg p "$P" '{name:$p,partition:"Common",type:"access-policy",startItem:($p+"_ent"),defaultEnding:($p+"_end_allow"),maxMacroLoopCount:1,oneshotMacro:"false",
-  items:[{name:($p+"_ent"),partition:"Common"},{name:($p+"_act_certauth"),partition:"Common"},{name:($p+"_act_varassign"),partition:"Common"},{name:($p+"_act_ldapquery"),partition:"Common"},{name:($p+"_end_allow"),partition:"Common"},{name:($p+"_end_deny"),partition:"Common"}]}')"
+  items:[{name:($p+"_ent"),partition:"Common"},{name:($p+"_act_certauth"),partition:"Common"},{name:($p+"_act_varassign"),partition:"Common"},{name:($p+"_act_ldapquery"),partition:"Common"},{name:($p+"_act_baofetch"),partition:"Common"},{name:($p+"_act_ssocreds"),partition:"Common"},{name:($p+"_end_allow"),partition:"Common"},{name:($p+"_end_deny"),partition:"Common"}]}')"
 tadd "$B/mgmt/tm/apm/profile/access/" "$(jq -n --arg p "$P" '{name:$p,partition:"Common",acceptLanguages:["en"],defaultLanguage:"en",accessPolicy:("/Common/"+$p),customizationGroup:("/Common/"+$p+"_logout"),epsGroup:("/Common/"+$p+"_eps"),errormapGroup:("/Common/"+$p+"_errormap"),frameworkInstallationGroup:("/Common/"+$p+"_framework_installation"),generalUiGroup:("/Common/"+$p+"_general_ui"),type:"all",scope:"profile",accessPolicyTimeout:300,inactivityTimeout:900,maxSessionTimeout:604800,logoutUriTimeout:5,maxConcurrentSessions:0,maxInProgressSessions:128,maxFailureDelay:5,minFailureDelay:2,secureCookie:"true",persistentCookie:"false",restrictToSingleClientIp:"false",userIdentityMethod:"http",logSettings:["/Common/default-log-setting"]}')"
 echo "  committing transaction..."
 curl "${A[@]}" -o /tmp/apm.out -w '  commit -> %{http_code}\n' -X PATCH -H 'Content-Type: application/json' -d '{"state":"VALIDATING"}' "$B/mgmt/tm/transaction/$TID"
 grep -q '"state":"COMPLETED"' /tmp/apm.out || { echo "  $(cat /tmp/apm.out)"; }
 
 step "6. test virtual server ${VIP_IP}:443 (client-ssl + access profile)"
-add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" \
+add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${VIP_IP}:443" --arg cs "/$PART/${P}-clientssl" --arg ap "/$PART/$P" --arg ir "/$PART/${P}-openbao-fetch" \
   '{name:$n,partition:"Common",destination:$d,mask:"255.255.255.255",ipProtocol:"tcp",
     profiles:[{name:"/Common/tcp"},{name:"/Common/http"},{name:$cs,context:"clientside"},{name:$ap}],
+    rules:[$ir],
     sourceAddressTranslation:{type:"automap"}}')"
 
 echo; echo "Done. Test:  curl -k --cert certs/clients/<uid>.crt --key certs/clients/<uid>.key https://${VIP_IP}/  ; then read /var/log/apm"
