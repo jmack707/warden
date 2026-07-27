@@ -73,9 +73,13 @@ else
   req POST  "$B/mgmt/tm/auth/ldap" "$LDAP_BODY" >/dev/null
 fi
 
-step "2. remote-user: default no-access, console disabled"
+step "2. remote-user: default = guest (read-only), console disabled"
+# deviation 13: non-admin cert identities authenticate and land on the webtop, then get
+# READ-ONLY (guest) on the target BIG-IP. Only bigip-admins members (employeeType stamp,
+# step 3) are elevated to administrator. Console stays off for the default (no shell for
+# read-only users). Was no-access — flipped to guest to satisfy "everyone else read-only".
 req PATCH "$B/mgmt/tm/auth/remote-user" \
-  '{"defaultRole":"no-access","remoteConsoleAccess":"disabled"}' >/dev/null
+  '{"defaultRole":"guest","remoteConsoleAccess":"disabled"}' >/dev/null
 
 step "3. remote-role role-info pua_admins (employeeType=pua-admins -> administrator)"
 RR_BODY='{"name":"pua_admins","attribute":"employeeType=pua-admins","role":"administrator","userPartition":"All","console":"tmsh","lineOrder":1}'

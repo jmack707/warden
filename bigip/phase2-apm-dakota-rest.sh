@@ -99,10 +99,12 @@ td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
 add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_varassign_ag" \
   '{name:$n,partition:"Common",variables:[{varname:"session.custom.cn",expression:"set cn {}; regexp {CN=([^,/]+)} [mcget {session.ssl.cert.subject}] -> cn; set cn"}]}')"
-# memberOf is an OPERATIONAL attr (not returned by a default query), but it CAN be
-# filtered on — so the group check is folded into the filter: match only iff the CN's
-# entry is a member of bigip-admins. queryresult==1 => valid user AND in the group.
-add "$B/mgmt/tm/apm/policy/agent/aaa-ldap" "$(jq -n --arg n "${P}_act_ldapquery_ag" --arg s "/$PART/$AAA" --arg base "$PEOPLE" --arg f "(&(uid=%{session.custom.cn})(memberOf=${GROUP_DN}))" \
+# AUTHZ MOVED TO THE BIG-IP (deviation 13): APM no longer gates on group membership —
+# the query is now identity-only (does uid=<CN> exist?). queryresult==1 => valid cert
+# identity => reach webtop/TMUI. The remote BIG-IP's remote-role then decides the role:
+# bigip-admins members (employeeType=pua-admins on their ou=users access acct) -> admin,
+# everyone else -> default read-only (guest). GROUP_DN kept above for reference only.
+add "$B/mgmt/tm/apm/policy/agent/aaa-ldap" "$(jq -n --arg n "${P}_act_ldapquery_ag" --arg s "/$PART/$AAA" --arg base "$PEOPLE" --arg f "(uid=%{session.custom.cn})" \
   '{name:$n,partition:"Common",type:"query",server:$s,searchDn:$base,filter:$f}')"
 
 step "4. ending agents + customization groups"

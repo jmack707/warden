@@ -1,0 +1,12 @@
+# Privileged ACCESS account for a NON-admin cert identity (deviation 13).
+# With the APM group gate removed, any valid cert identity reaches TMUI and APM injects
+# the ou=users credential; the target BIG-IP binds it, and remote-role applies the role.
+# bob.user carries NO employeeType, so he falls through to the BIG-IP default role (guest,
+# read-only). alice.admin (employeeType=pua-admins, in ldap/pua-users.ldif) stays admin.
+# OpenBao owns/rotates this userPassword (scripts/configure-openbao-static.sh bob.user).
+dn: uid=bob.user,ou=users,dc=pua,dc=lab
+objectClass: inetOrgPerson
+uid: bob.user
+cn: bob.user
+sn: PrivilegedAccount
+userPassword: rotate-me-immediately
