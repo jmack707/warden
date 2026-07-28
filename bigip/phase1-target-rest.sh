@@ -49,10 +49,13 @@ curl "${AUTH[@]}" -X POST \
   --data-binary @"$CA" \
   "$B/mgmt/shared/file-transfer/uploads/ca.crt" -o /dev/null -w '  upload HTTP %{http_code}\n'
 
-step "0c. install cert object warden-ca.crt"
-# create-or-update the sys file ssl-cert
+step "0c. install/update cert object warden-ca.crt"
+# create-or-UPDATE the sys file ssl-cert — must refresh on re-deploy: if the CA was
+# regenerated, an existing cert object still holds the OLD CA and client-cert auth fails.
 if curl "${AUTH[@]}" "$B/mgmt/tm/sys/file/ssl-cert/warden-ca.crt" | jqok '.name'; then
-  echo "  cert object already exists — skipping create"
+  req PATCH "$B/mgmt/tm/sys/file/ssl-cert/warden-ca.crt" \
+    '{"sourcePath":"file:/var/config/rest/downloads/ca.crt"}' >/dev/null
+  echo "  cert object updated to the current CA"
 else
   req POST "$B/mgmt/tm/sys/file/ssl-cert" \
     '{"name":"warden-ca.crt","sourcePath":"file:/var/config/rest/downloads/ca.crt"}' >/dev/null
