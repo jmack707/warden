@@ -5,8 +5,8 @@ with a password the operator never sees and instant session termination — comp
 OpenBao, OpenLDAP, and BIG-IP APM, with no custom code in the credential path.
 
 ## What & why
-F5 PUA (Privileged User Access) gives operators time-boxed, audited access without handing
-out standing credentials. Warden rebuilds that idea from open-source parts:
+Warden gives operators time-boxed, audited access to BIG-IP management without handing out
+standing credentials — built entirely from open-source parts:
 
 - **OpenBao** mints/rotates the privileged credential and is the broker.
 - **OpenLDAP** is the single source of truth the BIG-IP validates against.

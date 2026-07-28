@@ -4,10 +4,10 @@
 - Date: 2026-07-10
 
 ## Context
-We need an open-source replacement for F5 PUA (Privileged User Access): certificate-based
-authentication, a password the user never sees, reverse-proxied access to a target's
-management UI, and instant session termination. Building the credential path in bespoke
-code would put us on the hook for its security.
+We need open-source privileged access for BIG-IP: certificate-based authentication, a
+password the user never sees, reverse-proxied access to the target's management UI, and
+instant session termination. Building the credential path in bespoke code would put us on
+the hook for its security.
 
 ## Decision
 Compose existing, audited components instead of writing credential-handling code:

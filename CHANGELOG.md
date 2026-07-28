@@ -5,9 +5,9 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 
 ## 2026-07-28
 ### Changed
-- **Productized as a self-contained customer demo.** Renamed the project PUA → **Warden**
-  (F5 PUA, the product being replaced, is unchanged); `.env` is now the single config
-  surface (host, domain→BASE_DN, BIG-IP address(es), VIP, façades); added `./deploy.sh`
+- **Productized as a self-contained customer demo** under the name **Warden**. `.env` is now
+  the single config surface (host, domain→BASE_DN, BIG-IP address(es), VIP, façades); added
+  `./deploy.sh`
   one-command orchestration; the APM build supports a single BIG-IP or an HA pair via
   `WARDEN_BIGIP_B_*`; operator wrappers read `BIGIP_PASS` from `.env` or the environment.
 - **Removed the browser-SSH gateway** — the demo focuses on the credential core + APM/TMUI; SSH is via
