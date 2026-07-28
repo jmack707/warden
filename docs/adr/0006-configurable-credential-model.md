@@ -5,16 +5,16 @@
 
 ## Context
 The repo delivers credentials two ways: **leased ephemeral** (OpenBao mints a throwaway
-account, `ldap/creds/pua-admin`, that is deleted at TTL) and **rotated static** (OpenBao
+account, `ldap/creds/warden-admin`, that is deleted at TTL) and **rotated static** (OpenBao
 rotates the password of a standing account, `ldap/static-role/<CN>`). Originally the model
 was implied by the path — Phase 1 was always ephemeral, the APM injection flow always
 static — so choosing one meant editing scripts. We want the model to be a setting.
 
 ## Decision
-Introduce `PUA_CRED_MODE` (`ephemeral` | `static`, default `ephemeral`) and route the
+Introduce `WARDEN_CRED_MODE` (`ephemeral` | `static`, default `ephemeral`) and route the
 operator/issue path through a single abstraction, `scripts/lib/cred.sh`:
 - `cred_issue [principal]` → uniform JSON `{mode, username, password, handle, ttl}`.
-  - ephemeral: mint `ldap/creds/$PUA_EPHEMERAL_ROLE`; username is random; `handle` = lease id.
+  - ephemeral: mint `ldap/creds/$WARDEN_EPHEMERAL_ROLE`; username is random; `handle` = lease id.
   - static: rotate `ldap/rotate-role/<principal>` then read `ldap/static-cred/<principal>`;
     username = the principal (CN); `handle` = the principal. Requires the static role to
     exist (`configure-openbao-static.sh <CN>`).
@@ -22,7 +22,7 @@ operator/issue path through a single abstraction, `scripts/lib/cred.sh`:
   lease-revoked (account deleted); a bare CN is rotated (old password invalidated).
 
 `issue-cred.sh` and `revoke-cred.sh` now just source the library. `.env` sets the default;
-an explicit inline `PUA_CRED_MODE=…` wins over it (preserved across the `.env` source, same
+an explicit inline `WARDEN_CRED_MODE=…` wins over it (preserved across the `.env` source, same
 guard used for `BIGIP_PASS`).
 
 Scope: **this ADR covers the operator/issue path (step 1).** The global toggle is

@@ -13,20 +13,20 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ok()   { echo "  ok: $*"; }
 
 echo "== 1. issue ephemeral credential =="
-CRED_JSON="$(bao read -format=json ldap/creds/pua-admin)"
+CRED_JSON="$(bao read -format=json ldap/creds/warden-admin)"
 USERNAME="$(jq -r '.data.username' <<<"$CRED_JSON")"
 PASSWORD="$(jq -r '.data.password' <<<"$CRED_JSON")"
 LEASE_ID="$(jq -r '.lease_id'      <<<"$CRED_JSON")"
 [ -n "$USERNAME" ] && [ "$USERNAME" != null ] || fail "no username returned"
 ok "issued uid=$USERNAME (lease $LEASE_ID)"
 
-echo "== 2. directory entry present with employeeType=pua-admins =="
+echo "== 2. directory entry present with employeeType=warden-admins =="
 ENTRY="$(ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" \
   -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
   -b "ou=users,${BASE_DN}" "(uid=${USERNAME})" uid employeeType)"
 grep -q "uid: ${USERNAME}" <<<"$ENTRY" || fail "entry not found in directory"
-grep -q "employeeType: pua-admins" <<<"$ENTRY" || fail "employeeType attribute missing"
-ok "entry present, employeeType=pua-admins"
+grep -q "employeeType: warden-admins" <<<"$ENTRY" || fail "employeeType attribute missing"
+ok "entry present, employeeType=warden-admins"
 
 echo "== 3. bind over LDAPS (simulates the BIG-IP auth bind, TLS validated) =="
 WHO="$(LDAPTLS_CACERT="$CA" ldapwhoami -x \
@@ -56,7 +56,7 @@ fi
 ok "entry deleted, revoked credential rejected"
 
 echo "== 6. audit trail present =="
-docker exec openbao grep -q 'ldap/creds/pua-admin' /openbao/logs/openbao-audit.log \
+docker exec openbao grep -q 'ldap/creds/warden-admin' /openbao/logs/openbao-audit.log \
   || fail "no issuance event in audit log"
 ok "issuance recorded in /openbao/logs/openbao-audit.log"
 

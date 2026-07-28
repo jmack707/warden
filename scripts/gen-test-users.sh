@@ -2,7 +2,7 @@
 # Create the three cert->group->access test principals + their client certs.
 #   - memberof overlay (idempotent) so members get a memberOf attribute
 #   - ou=people / ou=groups, three users, cn=bigip-admins group
-#   - PUA-Lab-CA-signed client certs (CN=uid): alice.admin + bob.user valid,
+#   - Warden-Lab-CA-signed client certs (CN=uid): alice.admin + bob.user valid,
 #     carol.expired genuinely expired (notAfter in the past)
 # Private keys land in certs/clients/ (gitignored); .crt are public.
 set -euo pipefail
@@ -20,7 +20,7 @@ envsubst < "${HERE}/../ldap/test-users.ldif" \
   | ldapadd -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -c 2>&1 \
   | grep -viE "^adding" || true
 
-echo "== 3. issue client certs (CN=uid), signed by the PUA Lab CA =="
+echo "== 3. issue client certs (CN=uid), signed by the Warden Lab CA =="
 gen_client() {  # gen_client <uid> <valid|expired>
   local uid="$1" mode="$2"
   openssl req -newkey rsa:2048 -nodes -keyout "$CLIENTS/$uid.key" -out "$CLIENTS/$uid.csr" \
@@ -29,7 +29,7 @@ gen_client() {  # gen_client <uid> <valid|expired>
 basicConstraints=CA:FALSE
 keyUsage=digitalSignature,keyEncipherment
 extendedKeyUsage=clientAuth
-subjectAltName=email:$uid@pua.lab
+subjectAltName=email:$uid@warden.lab
 EOF
   if [ "$mode" = expired ]; then
     # valid window entirely in the past -> expired now
@@ -41,9 +41,10 @@ EOF
       -days 365 -extfile "$CLIENTS/$uid.ext" -out "$CLIENTS/$uid.crt" 2>/dev/null
   fi
   chmod 0644 "$CLIENTS/$uid.crt"; chmod 0600 "$CLIENTS/$uid.key"
-  # PKCS12 bundle for browser import (password: pua) — see scripts/import-browser-certs.sh
+  # PKCS12 bundle for browser import (password: $WARDEN_P12_PASS) — see scripts/import-browser-certs.sh
   openssl pkcs12 -export -inkey "$CLIENTS/$uid.key" -in "$CLIENTS/$uid.crt" \
-    -certfile "$CERTS/ca.crt" -name "PUA $uid" -out "$CLIENTS/$uid.p12" -passout pass:pua 2>/dev/null
+    -certfile "$CERTS/ca.crt" -name "Warden $uid" -out "$CLIENTS/$uid.p12" \
+    -passout pass:"${WARDEN_P12_PASS:-warden}" 2>/dev/null
   chmod 0600 "$CLIENTS/$uid.p12"
 }
 gen_client alice.admin   valid

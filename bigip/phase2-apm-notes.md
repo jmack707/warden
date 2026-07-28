@@ -11,8 +11,8 @@
 > iRule/iRulesLX fallback is provided.
 
 Environment recap (from Phase 1):
-- OSS core / OpenBao: `http://10.2.20.30:8200` (dev-mode PoC; role `ldap/creds/pua-admin`).
-- OpenLDAP: `10.2.20.30:636` (LDAPS, CA = PUA Lab CA).
+- OSS core / OpenBao: `http://10.2.20.30:8200` (dev-mode PoC; role `ldap/creds/warden-admin`).
+- OpenLDAP: `10.2.20.30:636` (LDAPS, CA = Warden Lab CA).
 - Target TMUI (proxied): `https://10.2.1.5` (bigipa mgmt) — in Phase 2 the user never
   reaches this directly; only the gateway and admins do (see §5 network isolation).
 - Guacamole: `http://10.2.20.30:8080/guacamole` (clientless SSH to the target).
@@ -22,40 +22,40 @@ Environment recap (from Phase 1):
 ## 1. Object inventory
 
 ### TLS / client auth
-- **Client-SSL profile `pua-clientssl`** with **On-Demand Cert Auth (ODCA)**:
-  - `cert` / `key` = gateway server cert (lab CA or FreeIPA-issued for `pua-gw.dakota.lab`).
+- **Client-SSL profile `warden-clientssl`** with **On-Demand Cert Auth (ODCA)**:
+  - `cert` / `key` = gateway server cert (lab CA or FreeIPA-issued for `warden-gw.dakota.lab`).
   - `ca-file` / `trusted-cert-authorities` = the CAC/PIV issuing CA chain (lab: FreeIPA
     CA `/root/freeipa-ca.pem`; real world: DoD PKI chain).
   - `peer-cert-mode` = `request` at handshake; the **On-Demand Cert Auth agent** in the
     per-session policy triggers the renegotiation that actually demands the client cert
     (so unauthenticated probes don't get prompted before policy start).
-- **OCSP responder object `pua-ocsp`** (or CRLDP): points at the issuing CA's OCSP URL;
+- **OCSP responder object `warden-ocsp`** (or CRLDP): points at the issuing CA's OCSP URL;
   referenced by the OCSP Auth agent. Lab: FreeIPA OCSP at `http://ipa.dakota.lab/ca/ocsp`.
 
 ### Access / SSO
-- **Access profile `pua-access`** (type `all`, per-session policy — see §2).
-- **Webtop `pua-webtop`** (type `full`) publishing two resources:
+- **Access profile `warden-access`** (type `all`, per-session policy — see §2).
+- **Webtop `warden-webtop`** (type `full`) publishing two resources:
   1. **Guacamole portal link** — a **Portal Access** or external-link resource to
      `http://10.2.20.30:8080/guacamole` (clientless SSH to the target).
   2. **TMUI resource** — a **Portal Access (reverse-proxy/rewrite)** resource to
      `https://10.2.1.5`, fronted by the TMUI-proxy VS (§ two virtuals) with **form SSO**.
-- **SSO config `pua-tmui-sso`** (form-based): capture the TMUI login form field names
+- **SSO config `warden-tmui-sso`** (form-based): capture the TMUI login form field names
   from a HAR the operator provides (typically `username` / `passwd`, form action
   `/tmui/logmein.html` or `/mgmt/...` depending on build — **confirm from the HAR**).
-  Maps `session.custom.pua.username` / `.password` into the injected POST.
-- **Connectivity profile `pua-cp`** + **rewrite profile `pua-rewrite`** for Portal Access.
+  Maps `session.custom.warden.username` / `.password` into the injected POST.
+- **Connectivity profile `warden-cp`** + **rewrite profile `warden-rewrite`** for Portal Access.
 
 ### Virtual servers
-- **Front-door VS `vs_pua_gw`** — `<gateway-ext-ip>:443`, client-SSL `pua-clientssl`,
-  access profile `pua-access`, connectivity/rewrite profiles, HTTP profile. This is the
+- **Front-door VS `vs_warden_gw`** — `<gateway-ext-ip>:443`, client-SSL `warden-clientssl`,
+  access profile `warden-access`, connectivity/rewrite profiles, HTTP profile. This is the
   only address CAC users connect to.
 - **TMUI-proxy VS `vs_tmui_proxy`** — internal-facing, pool = `10.2.1.5:443` (bigipa
   TMUI), server-SSL (TMUI is HTTPS), the form-SSO profile attached. Reached via the
   webtop's Portal Access resource, not directly by users.
 
 ### Session variables (set by policy, consumed by SSO)
-- `session.custom.pua.username`, `session.custom.pua.password`, `session.custom.pua.lease_id`
-  (lease id retained for §4 revoke-all), plus `session.custom.pua.edipi` (from the cert).
+- `session.custom.warden.username`, `session.custom.warden.password`, `session.custom.warden.lease_id`
+  (lease id retained for §4 revoke-all), plus `session.custom.warden.edipi` (from the cert).
 
 ---
 
@@ -64,18 +64,18 @@ Environment recap (from Phase 1):
 ```
 Start
   → On-Demand Cert Auth (request/require client cert; renegotiate)
-  → OCSP Auth  (pua-ocsp)                        [fallback: CRLDP Auth]
+  → OCSP Auth  (warden-ocsp)                        [fallback: CRLDP Auth]
       └ fail → Deny (logging: cert serial, reason)
   → Variable Assign: extract identity from the cert
-        session.custom.pua.edipi = mcget {session.ssl.cert.x509extension}  (parse SAN/UPN)
-        session.custom.pua.upn   = mcget {session.ssl.cert.subject}         (or othername UPN)
+        session.custom.warden.edipi = mcget {session.ssl.cert.x509extension}  (parse SAN/UPN)
+        session.custom.warden.upn   = mcget {session.ssl.cert.subject}         (or othername UPN)
   → OpenBao credential fetch  (see §3 — HTTP Connector agent OR iRule event)
-        sets session.custom.pua.username / .password / .lease_id
+        sets session.custom.warden.username / .password / .lease_id
       └ fail → Deny (OpenBao unreachable / lease error)
   → Variable Assign: map creds into the SSO credential-mapping variables
-        session.sso.token.last.username = session.custom.pua.username
-        session.sso.token.last.password = session.custom.pua.password
-  → Full Resource Assign: pua-webtop + Guacamole resource + TMUI Portal Access resource
+        session.sso.token.last.username = session.custom.warden.username
+        session.sso.token.last.password = session.custom.warden.password
+  → Full Resource Assign: warden-webtop + Guacamole resource + TMUI Portal Access resource
   → Allow
 ```
 
@@ -88,7 +88,7 @@ Notes:
 
 ## 3. OpenBao credential fetch — options by TMOS version  ⚠ VALIDATE ON 21.1.0
 
-The APM policy must call `GET http://10.2.20.30:8200/v1/ldap/creds/pua-admin` with the
+The APM policy must call `GET http://10.2.20.30:8200/v1/ldap/creds/warden-admin` with the
 **scoped** OpenBao token (X-Vault-Token header) and parse `data.username`/`data.password`
 + `lease_id` from the JSON. Two implementation paths:
 
@@ -97,11 +97,11 @@ Newer APM builds expose an **HTTP Connector** (Access ▸ … ▸ HTTP Connector
 agent) that performs an outbound HTTP request inside the per-session policy and writes
 the response into session variables via a response-transformation. If VPE on this 21.1.0
 build shows the HTTP Connector agent, use it:
-- Request: `GET`, URL `http://10.2.20.30:8200/v1/ldap/creds/pua-admin`,
+- Request: `GET`, URL `http://10.2.20.30:8200/v1/ldap/creds/warden-admin`,
   header `X-Vault-Token: <scoped-token>` (store the token in an APM *system* variable /
   encrypted, not inline).
-- Response transform (JSONPath): `$.data.username → session.custom.pua.username`,
-  `$.data.password → session.custom.pua.password`, `$.lease_id → session.custom.pua.lease_id`.
+- Response transform (JSONPath): `$.data.username → session.custom.warden.username`,
+  `$.data.password → session.custom.warden.password`, `$.lease_id → session.custom.warden.lease_id`.
 - **FLAG:** confirm the agent name/JSONPath transform exists on 21.1.0 before committing.
 
 ### Option B — iRule sideband + iRule Event agent (fallback, always available)
@@ -113,23 +113,23 @@ when ACCESS_POLICY_AGENT_EVENT {
     if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
         set bao_host "10.2.20.30"
         set bao_port 8200
-        set bao_tok  [ACCESS::session data get session.custom.pua.baotoken] ;# seeded from a system var
+        set bao_tok  [ACCESS::session data get session.custom.warden.baotoken] ;# seeded from a system var
         set node "$bao_host:$bao_port"
         set conn [connect -timeout 3000 -idle 5 -status conn_status $node]
-        if { $conn eq "" } { ACCESS::session data set session.custom.pua.fetch_err "connect-failed"; return }
-        set req "GET /v1/ldap/creds/pua-admin HTTP/1.1\r\nHost: $bao_host\r\nX-Vault-Token: $bao_tok\r\nConnection: close\r\n\r\n"
+        if { $conn eq "" } { ACCESS::session data set session.custom.warden.fetch_err "connect-failed"; return }
+        set req "GET /v1/ldap/creds/warden-admin HTTP/1.1\r\nHost: $bao_host\r\nX-Vault-Token: $bao_tok\r\nConnection: close\r\n\r\n"
         send -timeout 3000 -status send_status $conn $req
         set resp [recv -timeout 3000 $conn]
         close $conn
         # crude JSON extraction (swap for a JSON parser / iRulesLX for production)
         if { [regexp {"username"\s*:\s*"([^"]+)"} $resp -> u] } {
-            ACCESS::session data set session.custom.pua.username $u
+            ACCESS::session data set session.custom.warden.username $u
         }
         if { [regexp {"password"\s*:\s*"([^"]+)"} $resp -> p] } {
-            ACCESS::session data set session.custom.pua.password $p
+            ACCESS::session data set session.custom.warden.password $p
         }
         if { [regexp {"lease_id"\s*:\s*"([^"]+)"} $resp -> l] } {
-            ACCESS::session data set session.custom.pua.lease_id $l
+            ACCESS::session data set session.custom.warden.lease_id $l
         }
     }
 }

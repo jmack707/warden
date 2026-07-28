@@ -9,11 +9,11 @@ This is a lab build. The rules below exist because breaking them has bitten us.
   `BIGIP_PASS` in `.env` is intentionally empty; do not populate it.
 
 ## Repository topology (important)
-The canonical repo lives on the **pua-oss VM** (`/root/pua-oss`). **Nora** holds a mirror
-(also `/root/pua-oss`) that the operator wrappers build from. The flow:
+The canonical repo lives on the **warden VM** (`/root/warden`). **Nora** holds a mirror
+(also `/root/warden`) that the operator wrappers build from. The flow:
 ```bash
 # author + commit on the VM (canonical), then sync the Nora mirror:
-git -C /root/pua-oss pull --ff-only      # on Nora
+git -C /root/warden pull --ff-only      # on Nora
 ```
 `bigip/run-dakota-apm-build.sh` and `bigip/run-revoke.sh` run on Nora and use the mirror —
 a VM-only edit that is not committed+pulled will not take effect. This has caused "my change

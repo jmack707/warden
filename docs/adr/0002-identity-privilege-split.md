@@ -13,7 +13,7 @@ Two subtrees in OpenLDAP:
 - **`ou=people`** — identity entries keyed by the cert CN. APM maps the CN here.
 - **`ou=users`** — privileged *access* accounts. OpenBao owns and rotates their
   `userPassword`; the target BIG-IP validates the injected credential by binding as
-  `uid=<CN>,ou=users`. `employeeType=pua-admins` marks an admin.
+  `uid=<CN>,ou=users`. `employeeType=warden-admins` marks an admin.
 
 `cn=bigip-admins,ou=groups` is the admin group. `cn=bigip-bind,ou=svc` is the BIG-IP
 search/bind account, granted read on `ou=users` but never `userPassword`.

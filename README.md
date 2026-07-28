@@ -1,4 +1,4 @@
-# pua-oss — OSS replacement for F5 PUA (Dakota lab)
+# warden — OSS replacement for F5 PUA (Dakota lab)
 
 Certificate-authenticated privileged access to BIG-IP management, with a password the user
 never sees and instant session termination — composed from OpenBao, OpenLDAP, Guacamole,
@@ -18,7 +18,7 @@ Design rationale is in [docs/adr/](docs/adr/); the full picture in
 [docs/architecture.md](docs/architecture.md).
 
 ## Topology
-- Runs on the **pua-oss VM** (`10.2.20.30`, Dakota VLAN 73): OpenBao (`:8200`), OpenLDAP
+- Runs on the **warden VM** (`10.2.20.30`, Dakota VLAN 73): OpenBao (`:8200`), OpenLDAP
   (`:636`), Guacamole (`:8080`).
 - Targets the **Dakota BIG-IP pair** (`bigipa` 10.2.1.5, `bigipb` 10.2.1.6, TMOS 21.1.0).
 - APM front door at VIP `https://10.2.20.50/`.

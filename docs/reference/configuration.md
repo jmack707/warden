@@ -13,14 +13,14 @@ _Last validated: 2026-07._
 | `BIGIP_MGMT` | IPv4 | `10.2.1.5` | yes | Target BIG-IP (bigipa) REST/management address |
 | `BIGIP_USER` | string | `admin` | yes | BIG-IP account for `[AGENT-IF-ACCESS]` REST calls |
 | `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — injected by the AppRole wrapper; scripts preserve an injected value across the `.env` source |
-| `BASE_DN` | LDAP DN | `dc=pua,dc=lab` | yes | Directory base DN |
+| `BASE_DN` | LDAP DN | `dc=warden,dc=lab` | yes | Directory base DN |
 | `LDAP_ADMIN_PW` | string | `AdminPw1!` | yes | OpenLDAP `cn=admin` password (lab only — rotate if shared) |
 | `BIND_PW` | string | `BindPw1!` | yes | `cn=bigip-bind` read-only bind password |
 | `BAO_ADDR` | URL | `http://10.2.20.30:8200` | yes | OpenBao API address |
 | `BAO_TOKEN` | string | `root` (dev) / generated (prod) | yes | OpenBao token; production value is written by `openbao-init-unseal.sh` |
 | `TEST_USER_PW` | string | `TestUser1!` | for test users | Password for the alice/bob/carol test principals (lab only) |
-| `PUA_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
-| `PUA_EPHEMERAL_ROLE` | string | `pua-admin` | no | OpenBao `ldap/creds/<role>` used in `ephemeral` mode |
+| `WARDEN_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
+| `WARDEN_EPHEMERAL_ROLE` | string | `warden-admin` | no | OpenBao `ldap/creds/<role>` used in `ephemeral` mode |
 | `GUAC_ADMIN_PW` | string | `PuaGuac2026!` | for Guac | guacadmin password (rotated from the rejected default by `configure-guacamole.sh`) |
 
 ## BIG-IP sys db / httpd knobs (set by the build)
@@ -32,15 +32,15 @@ _Last validated: 2026-07._
 | `auth-pam-validate-ip` (sys httpd) | `off` | same, at the PAM layer — both units |
 | external `external-self`/`ext_float` `allow-service` | none (`[]`) | no TMUI/SSH on the external VLAN (ADR 0003 hardening) |
 
-## Key BIG-IP object names (partition `/Common`, prefix `pua-apm`)
+## Key BIG-IP object names (partition `/Common`, prefix `warden-apm`)
 | Object | Name |
 |---|---|
-| Access profile | `pua-apm` |
-| Test VIP | `10.2.20.50:443` (`pua-apm-test-vs`) |
-| AAA LDAP + pool | `pua-openldap-aaa`, `pua-openldap-aaa-pool` |
-| Shadow façades | `pua-apm-shadow-a-vs` (192.0.2.5), `pua-apm-shadow-b-vs` (192.0.2.6) |
-| Portal Access | `pua-apm-bigipa-tmui`, `pua-apm-bigipb-tmui` |
-| Scoped-token data-group | `pua_openbao_dg` |
+| Access profile | `warden-apm` |
+| Test VIP | `10.2.20.50:443` (`warden-apm-test-vs`) |
+| AAA LDAP + pool | `warden-openldap-aaa`, `warden-openldap-aaa-pool` |
+| Shadow façades | `warden-apm-shadow-a-vs` (192.0.2.5), `warden-apm-shadow-b-vs` (192.0.2.6) |
+| Portal Access | `warden-apm-bigipa-tmui`, `warden-apm-bigipb-tmui` |
+| Scoped-token data-group | `warden_openbao_dg` |
 
 ## OpenBao production config
 `openbao/openbao-prod.hcl` (raft storage, HTTP listener :8200, audit-file device) plus

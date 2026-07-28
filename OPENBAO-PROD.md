@@ -25,9 +25,9 @@ Listener stays HTTP on the internal VLAN so the APM iRule sideband, `mint-apm-to
 the `bao()` helpers keep working unchanged. Locking OpenBao behind TLS cascades into the iRule
 and scoped-token flow — deliberately deferred.
 
-## Cutover (operator, ~5 min downtime for the PUA flow)
+## Cutover (operator, ~5 min downtime for the Warden flow)
 ```
-cd /root/pua-oss
+cd /root/warden
 docker-compose down openbao                        # drop the dev container (in-mem state is disposable)
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
 ./scripts/openbao-init-unseal.sh                   # first run: init + unseal + write .env BAO_TOKEN

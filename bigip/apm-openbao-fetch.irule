@@ -14,14 +14,14 @@ when ACCESS_POLICY_AGENT_EVENT {
         set bao_host "10.2.20.30"
         set bao_port 8200
         # scoped token seeded from an encrypted APM system variable at policy start:
-        set bao_tok [ACCESS::session data get session.custom.pua.baotoken]
+        set bao_tok [ACCESS::session data get session.custom.warden.baotoken]
 
         set conn [connect -timeout 3000 -idle 5 -status cs "$bao_host:$bao_port"]
         if { $conn eq "" } {
-            ACCESS::session data set session.custom.pua.fetch_err "connect-failed"
+            ACCESS::session data set session.custom.warden.fetch_err "connect-failed"
             return
         }
-        set req "GET /v1/ldap/creds/pua-admin HTTP/1.1\r\nHost: ${bao_host}\r\nX-Vault-Token: ${bao_tok}\r\nConnection: close\r\n\r\n"
+        set req "GET /v1/ldap/creds/warden-admin HTTP/1.1\r\nHost: ${bao_host}\r\nX-Vault-Token: ${bao_tok}\r\nConnection: close\r\n\r\n"
         send -timeout 3000 $conn $req
         set resp ""
         while { 1 } {
@@ -32,16 +32,16 @@ when ACCESS_POLICY_AGENT_EVENT {
         close $conn
 
         if { [regexp {"username"\s*:\s*"([^"]+)"} $resp -> u] } {
-            ACCESS::session data set session.custom.pua.username $u
+            ACCESS::session data set session.custom.warden.username $u
         }
         if { [regexp {"password"\s*:\s*"([^"]+)"} $resp -> p] } {
-            ACCESS::session data set session.custom.pua.password $p
+            ACCESS::session data set session.custom.warden.password $p
         }
         if { [regexp {"lease_id"\s*:\s*"([^"]+)"} $resp -> l] } {
-            ACCESS::session data set session.custom.pua.lease_id $l
+            ACCESS::session data set session.custom.warden.lease_id $l
         }
-        if { ![ACCESS::session data get session.custom.pua.username] } {
-            ACCESS::session data set session.custom.pua.fetch_err "parse-failed"
+        if { ![ACCESS::session data get session.custom.warden.username] } {
+            ACCESS::session data set session.custom.warden.fetch_err "parse-failed"
         }
     }
 }

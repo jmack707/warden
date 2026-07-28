@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 2 (decision core) — build the APM cert -> CN -> LDAP memberOf -> GROUP BRANCH
 # -> Allow/Deny policy on bigipa.dakota, plus a test VIP. This is the access-DECISION
-# half of the PUA front door (no webtop/SSO/OpenBao-injection yet) — enough to test the
+# half of the Warden front door (no webtop/SSO/OpenBao-injection yet) — enough to test the
 # alice/bob/carol matrix with `curl --cert`.
 #
 # Graph:  Start -> Client Cert Inspection (valid==0)
@@ -12,7 +12,7 @@
 #
 # Modeled on the working bigip-apm-cert-ldap role (REST + one policy transaction).
 # Additive/idempotent (tolerates 409). Requires BIGIP_PASS + BIND_PW in env/.env.
-# The CA (pua-lab-ca.crt) is already installed from Phase 1.
+# The CA (warden-ca.crt) is already installed from Phase 1.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 _PASS_IN="${BIGIP_PASS:-}"; set -a; . "${HERE}/../.env"; set +a
@@ -22,10 +22,10 @@ _PASS_IN="${BIGIP_PASS:-}"; set -a; . "${HERE}/../.env"; set +a
 IRULE_FILE="${HERE}/apm-openbao-fetch-dakota.irule"
 
 B="https://${BIGIP_MGMT}"; A=(-sk -u "${BIGIP_USER}:${BIGIP_PASS}")
-P=pua-apm                      # object-name prefix / access-profile name
+P=warden-apm                      # object-name prefix / access-profile name
 PART=Common
-CA=pua-lab-ca.crt              # installed in Phase 1
-AAA=pua-openldap-aaa
+CA=warden-ca.crt              # installed in Phase 1
+AAA=warden-openldap-aaa
 LDAP_HOST="${LAB_HOST_IP}"     # 10.2.20.30 (OpenLDAP)
 PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
@@ -56,7 +56,7 @@ add(){ # add <url> <json>
   case "$code" in 200|201|409) ;; *) echo "    $(cat /tmp/apm.out)"; return 1;; esac
 }
 
-step "1. client-ssl profile (require client cert, trust = PUA Lab CA)"
+step "1. client-ssl profile (require client cert, trust = Warden Lab CA)"
 add "$B/mgmt/tm/ltm/profile/client-ssl" "$(jq -n --arg n "${P}-clientssl" --arg ca "/$PART/$CA" \
   '{name:$n,partition:"Common",defaultsFrom:"/Common/clientssl",cert:"/Common/default.crt",key:"/Common/default.key",caFile:$ca,peerCertMode:"require"}')"
 
@@ -66,7 +66,7 @@ step "2. LTM pool + APM AAA LDAP server (bind = bigip-bind, for the memberOf que
 TMSH_AAA="tmsh create ltm pool ${AAA}-pool { members add { ${LDAP_HOST}:389 } monitor tcp } ; tmsh create apm aaa ldap ${AAA} { pool ${AAA}-pool port 389 admin-dn \"${BINDDN}\" admin-encrypted-password \"${BIND_PW}\" base-dn \"${PEOPLE}\" }"
 curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
   -d "$(jq -n --arg u "-c '${TMSH_AAA}'" '{command:"run",utilCmdArgs:$u}')" \
-  | jq -r '.commandResult // "  created pool + pua-openldap-aaa"'
+  | jq -r '.commandResult // "  created pool + warden-openldap-aaa"'
 
 step "2b. teardown the mutable graph (VIP/profile/policy/items/agents) so this re-runs cleanly"
 td(){ curl "${A[@]}" -o /dev/null -w "  DEL ${1##*~} -> %{http_code}\n" -X DELETE "$1"; }
@@ -94,7 +94,7 @@ td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-referer-strip"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-a-node"
 td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-b-node"
-td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~pua_openbao_dg"
+td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~warden_openbao_dg"
 
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
 add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_varassign_ag" \
@@ -102,7 +102,7 @@ add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_var
 # AUTHZ MOVED TO THE BIG-IP (deviation 13): APM no longer gates on group membership —
 # the query is now identity-only (does uid=<CN> exist?). queryresult==1 => valid cert
 # identity => reach webtop/TMUI. The remote BIG-IP's remote-role then decides the role:
-# bigip-admins members (employeeType=pua-admins on their ou=users access acct) -> admin,
+# bigip-admins members (employeeType=warden-admins on their ou=users access acct) -> admin,
 # everyone else -> default read-only (guest). GROUP_DN kept above for reference only.
 add "$B/mgmt/tm/apm/policy/agent/aaa-ldap" "$(jq -n --arg n "${P}_act_ldapquery_ag" --arg s "/$PART/$AAA" --arg base "$PEOPLE" --arg f "(uid=%{session.custom.cn})" \
   '{name:$n,partition:"Common",type:"query",server:$s,searchDn:$base,filter:$f}')"
@@ -120,14 +120,14 @@ step "4b. OpenBao fetch (iRule + token datagroup) + fetch/SSO-creds agents (Stag
 # iRule that rotates+reads the CN's OpenBao static-cred and stashes the password
 add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-openbao-fetch" --rawfile b "$IRULE_FILE" '{name:$n,partition:"Common",apiAnonymous:$b}')"
 # scoped token datagroup for the iRule
-add "$B/mgmt/tm/ltm/data-group/internal" "$(jq -n --arg t "$APM_TOKEN" '{name:"pua_openbao_dg",partition:"Common",type:"string",records:[{name:"token",data:$t}]}')"
+add "$B/mgmt/tm/ltm/data-group/internal" "$(jq -n --arg t "$APM_TOKEN" '{name:"warden_openbao_dg",partition:"Common",type:"string",records:[{name:"token",data:$t}]}')"
 # iRule Event agent (id must match the iRule's agent_id check)
 add "$B/mgmt/tm/apm/policy/agent/irule-event" "$(jq -n --arg n "${P}_act_baofetch_ag" '{name:$n,partition:"Common",id:"openbao_fetch"}')"
 # SSO Credentials agent: username = CN, password = the fetched OpenBao value
 add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_ssocreds_ag" \
   '{name:$n,partition:"Common",variables:[
      {varname:"session.sso.token.last.username",expression:"mcget {session.custom.cn}"},
-     {varname:"session.sso.token.last.password",expression:"mcget {session.custom.pua.password}",secure:"true"}]}')"
+     {varname:"session.sso.token.last.password",expression:"mcget {session.custom.warden.password}",secure:"true"}]}')"
 
 step "4c. shadow façade VSs (non-reserved portal targets; TLS passthrough; iRule node = last hop)"
 # loopback node targets (127.0.0.1 / own self-IP) need these; peer targets don't, but harmless

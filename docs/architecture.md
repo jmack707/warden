@@ -1,4 +1,4 @@
-# PUA-OSS — Architecture (Dakota)
+# Warden — Architecture (Dakota)
 
 _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x, OpenLDAP (osixia) 1.5.0,
 Guacamole 1.6.0._
@@ -11,33 +11,33 @@ deviations 1–16 ([../DEVIATIONS.md](../DEVIATIONS.md) for the why of each, dis
 ## Components
 | Host | Role |
 |---|---|
-| pua-oss VM (10.2.20.30, VLAN 73) | Docker stack: **OpenBao** (raft-persisted, sealed/auto-unseal, :8200 HTTP internal), **OpenLDAP** (LDAPS :636), **Guacamole** (guac/guacd/postgres, :8080) |
+| warden VM (10.2.20.30, VLAN 73) | Docker stack: **OpenBao** (raft-persisted, sealed/auto-unseal, :8200 HTTP internal), **OpenLDAP** (LDAPS :636), **Guacamole** (guac/guacd/postgres, :8080) |
 | bigipa (10.2.1.5 mgmt / 10.2.20.5 internal / 10.2.10.5 ext, TMOS 21.1.0) | APM front door: cert auth, LDAP query, OpenBao credential injection, portal/webtop |
 | bigipb (10.2.1.6 / 10.2.20.6 / 10.2.10.6) | HA peer; a portal target (its own TMUI). APM /Common objects sync from A |
 
 ## Identity / privilege split (LDAP)
 - **ou=people** — identity entries (alice.admin, bob.user, carol.expired). Cert CN maps here.
 - **ou=users** — privileged *access* accounts whose password OpenBao owns/rotates and the
-  BIG-IP validates by LDAP bind. `employeeType=pua-admins` marks admins (alice.admin has it;
+  BIG-IP validates by LDAP bind. `employeeType=warden-admins` marks admins (alice.admin has it;
   bob.user does not).
 - **cn=bigip-admins,ou=groups** — the admin group (drove the old APM filter; retained).
 - `cn=bigip-bind,ou=svc` — the BIG-IP search/bind account (read ACL on ou=users, no password read).
 
 ## Request flow (browser → privileged TMUI)
-1. **Client cert** (PUA Lab CA) at the APM VIP 10.2.20.50 → APM extracts the CN.
+1. **Client cert** (Warden Lab CA) at the APM VIP 10.2.20.50 → APM extracts the CN.
    Invalid/expired cert (carol) → TLS reject at the handshake.
 2. **LDAP query** `(uid=<CN>)` against OpenLDAP — identity-only (authz is on the BIG-IP now,
    deviation 13). Exists → continue; else Deny.
 3. **OpenBao fetch** — APM iRule sidebands to OpenBao (:8200) with a scoped token, rotates
    `ldap/rotate-role/<CN>` then reads `ldap/static-cred/<CN>`; the fresh one-time password
-   lands in `session.custom.pua.password`.
+   lands in `session.custom.warden.password`.
 4. **Webtop** (full) with two Portal Access bookmarks, delivered via **shadow façades**
    (deviation 12): 192.0.2.5 → this unit's own TMUI (iRule `node 127.0.0.1`), 192.0.2.6 →
    bigipb TMUI over the internal VLAN. Façades dodge APM's reserved-address guard;
    TMUI is NOT exposed on the external VLAN (deviation 14).
 5. **Form SSO** (websso) injects CN + fetched password into the target's /tmui/logmein.html.
 6. **Target BIG-IP authorizes** by LDAP bind + remote-role (deviation 13):
-   employeeType=pua-admins → **Administrator** (alice), otherwise default → **Guest /
+   employeeType=warden-admins → **Administrator** (alice), otherwise default → **Guest /
    read-only** (bob).
 
 ## Authorization outcome
@@ -48,7 +48,7 @@ deviations 1–16 ([../DEVIATIONS.md](../DEVIATIONS.md) for the why of each, dis
 | carol.expired | expired | TLS reject | — |
 
 ## Credential models
-Credentials come two ways, selectable by `PUA_CRED_MODE` on the operator/issue path
+Credentials come two ways, selectable by `WARDEN_CRED_MODE` on the operator/issue path
 ([ADR 0006](adr/0006-configurable-credential-model.md)):
 - **ephemeral** — OpenBao mints a throwaway leased account (random username, deleted at
   TTL). Consumed by the operator over SSH (Guacamole today, webssh later).
@@ -72,10 +72,10 @@ APM/TMUI session), Guac PATCH-remove (live SSH tunnel).
 - admin/root stay local on both BIG-IPs (never LDAP) — recovery path.
 
 ## Trust boundaries
-- **Client → APM VIP (10.2.20.50):** authenticated by X.509 client cert (PUA Lab CA) with
+- **Client → APM VIP (10.2.20.50):** authenticated by X.509 client cert (Warden Lab CA) with
   `peerCertMode require`. An untrusted/expired cert fails at the TLS handshake — nothing
   downstream runs.
-- **APM → OpenBao (:8200):** a least-privilege scoped token (policy `pua-apm-read`, reads
+- **APM → OpenBao (:8200):** a least-privilege scoped token (policy `warden-apm-read`, reads
   only `ldap/static-cred/*` + `ldap/rotate-role/*`), carried in an internal data-group.
   HTTP, on the internal VLAN only.
 - **OpenBao → OpenLDAP:** OpenBao owns the `userPassword` of ou=users accounts and is the

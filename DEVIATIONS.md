@@ -3,7 +3,7 @@
 Per the runbook's standing instruction to record every deviation.
 
 ## Environment / placement
-- **Stack host:** the OSS core runs on a **dedicated VM `pua-oss` (VMID 240)** built
+- **Stack host:** the OSS core runs on a **dedicated VM `warden` (VMID 240)** built
   on the Dakota Proxmox host, not the generic `10.1.1.10` lab default.
   - `LAB_HOST_IP=10.2.20.30`, VLAN 73 (Dakota "internal", 10.2.20.0/24), gw 10.2.20.1.
   - Debian 13 genericcloud, 4 vCPU / 8 GB / 33 GB on `nvme` lvm-thin, ovmf/EFI
@@ -36,7 +36,7 @@ Per the runbook's standing instruction to record every deviation.
 ## Findings during execution (Phase 1)
 - **openbao mount path:** the image reserves `/openbao` (declares `/openbao/logs`,
   `/openbao/data` volumes). Mounting the repo at `/openbao:ro` made it read-only and
-  the container refused to start. Moved the config mount to **`/pua:ro`**.
+  the container refused to start. Moved the config mount to **`/warden:ro`**.
 - **openldap certs mount must be writable:** osixia/openldap 1.5.0 `chown`s
   `/container/service/slapd/assets/certs` on startup; with `:ro` it dies with
   "Read-only file system". Dropped `:ro` from that mount (certs are lab material).
@@ -45,13 +45,13 @@ Per the runbook's standing instruction to record every deviation.
   rejected — "cannot enable audit device via API; use declarative, config-based audit
   device management instead". Added **`openbao/openbao.hcl`** with an `audit "file"`
   stanza (requires `type`, `path`, and an `options { file_path }` block) and load it via
-  `server -dev -config=/pua/openbao.hcl`. Audit log path is now
+  `server -dev -config=/warden/openbao.hcl`. Audit log path is now
   `/openbao/logs/openbao-audit.log` (was `/tmp/openbao-audit.log` in the runbook).
 - **dev-mode OpenBao is ephemeral:** every `openbao` container recreate wipes the
   in-memory state, so `scripts/configure-openbao.sh` must be re-run after any recreate.
   Acceptable for the PoC (runbook flags dev mode as PoC-only); harden with a real
   storage backend for anything persistent.
-- `username_template='pua-{{random 10 | lowercase}}'` accepted as-is (no fallback needed).
+- `username_template='warden-{{random 10 | lowercase}}'` accepted as-is (no fallback needed).
 - **GATE 1A: PASSED** — issue -> directory entry (+employeeType) -> LDAPS bind ->
   revoke -> entry gone + bind rejected -> issuance in the audit log.
 
@@ -68,7 +68,7 @@ Per the runbook's standing instruction to record every deviation.
   with the directory admin bind).
 - **T1.7 reachability:** bigipa's Linux host routes `10.2.20.30` directly out the
   `internal` TMM interface (`src 10.2.20.5`) — LDAPS goes over VLAN 73, not the mgmt
-  gateway. TLS probe returned the correct cert (`CN=openldap.pua.lab`).
+  gateway. TLS probe returned the correct cert (`CN=openldap.warden.lab`).
 - **T1.7 credential path:** bigipa admin password fetched from the LAB OpenBao
   `kv/bigip/common` via the sanctioned `f5-onboard` AppRole (`bootstrap/f5-bigip/bin/bao.sh`),
   never stored in this repo.
@@ -125,7 +125,7 @@ Requirement: any valid cert identity reaches the webtop/TMUI; the BIG-IP decides
 (bigip-admins → admin, everyone else → read-only). Changes:
 - APM aaa-ldap filter `(&(uid=..)(memberOf=..))` → identity-only `(uid=%{session.custom.cn})`.
 - BIG-IP `auth remote-user default-role` no-access → **guest** (read-only) on BOTH units
-  (device-local; not synced) + saved. `remote-role pua_admins` (employeeType=pua-admins →
+  (device-local; not synced) + saved. `remote-role warden_admins` (employeeType=warden-admins →
   administrator) unchanged. This IS group-based authz: bigip-admins members carry the
   employeeType stamp on their ou=users access account — no check-roles-group/group-dn needed.
 - New non-admin access account uid=bob.user,ou=users (NO employeeType) + OpenBao static role.

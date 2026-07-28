@@ -1,16 +1,16 @@
 # Production override for OpenBao: persisted raft storage + real seal lifecycle.
 # Use ALONGSIDE the base file:
 #   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-# Only the openbao service changes; openldap/guac inherit from the base compose.
+# Only the openbao service changes; openldap inherits from the base compose.
 services:
   openbao:
     # blank the base file's BAO_DEV_* (compose merges env, so we must override, not omit)
     environment:
       BAO_DEV_ROOT_TOKEN_ID: ""
       BAO_DEV_LISTEN_ADDRESS: ""
-    command: server -config=/pua/openbao-prod.hcl # boots SEALED; run openbao-init-unseal.sh
+    command: server -config=/warden/openbao-prod.hcl # boots SEALED; run openbao-init-unseal.sh
     volumes:
-      - ./openbao:/pua:ro
+      - ./openbao:/warden:ro
       - openbaodata:/openbao/data                 # raft state — persists across recreate
       - openbaologs:/openbao/logs                 # audit log survives too
     restart: unless-stopped

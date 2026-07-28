@@ -1,6 +1,6 @@
 # Dev-mode overlay: OpenBao 2.x requires audit devices to be declared in config
-# (no longer enableable via API/CLI). Mounted read-only at /pua/openbao.hcl and
-# loaded with `server -dev -config=/pua/openbao.hcl`. Storage/listener/root-token
+# (no longer enableable via API/CLI). Mounted read-only at /warden/openbao.hcl and
+# loaded with `server -dev -config=/warden/openbao.hcl`. Storage/listener/root-token
 # still come from -dev.
 audit "file" {
   type = "file"

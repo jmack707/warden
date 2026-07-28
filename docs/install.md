@@ -1,6 +1,6 @@
 # Install — OSS credential core (Phase 1)
 
-First-time standup of the Docker stack (OpenBao, OpenLDAP, Guacamole) on the pua-oss VM.
+First-time standup of the Docker stack (OpenBao, OpenLDAP, Guacamole) on the warden VM.
 This is Phase 1 only; the BIG-IP APM front door is [deploy.md](deploy.md).
 
 _Last validated: 2026-07 on Debian 13, docker.io 26.1.5 + docker-compose v2, OpenBao 2.x,
@@ -14,7 +14,7 @@ OpenLDAP (osixia) 1.5.0, Guacamole 1.6.0._
 
 ## Steps
 ```bash
-cd /root/pua-oss
+cd /root/warden
 cp .env.example .env            # then edit: LAB_HOST_IP, BASE_DN, LDAP_ADMIN_PW, BIND_PW
 scripts/gen-certs.sh            # CA + LDAPS server cert; SAN MUST include LAB_HOST_IP
 

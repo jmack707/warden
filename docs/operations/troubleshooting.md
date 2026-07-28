@@ -48,7 +48,7 @@ Two distinct causes (`docker logs openbao`):
   uid 100. Fix and restart:
   ```bash
   docker-compose -f docker-compose.yml -f docker-compose.prod.yml stop openbao
-  docker run --rm -v pua-oss_openbaodata:/data -v pua-oss_openbaologs:/logs busybox chown -R 100:1000 /data /logs
+  docker run --rm -v warden_openbaodata:/data -v warden_openbaologs:/logs busybox chown -R 100:1000 /data /logs
   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
   ```
   `openbao-init-unseal.sh` now does this chown automatically on every run.
@@ -60,8 +60,8 @@ injects the value will clobber it unless it preserves the incoming value across 
 wrapper (`run-dakota-apm-build.sh`, `run-revoke.sh`), which injects the password correctly.
 
 ## Build ignored my edit
-`run-dakota-apm-build.sh` executes the script from **Nora's** `/root/pua-oss` mirror, not
-the VM repo. Commit on the VM, then `git -C /root/pua-oss pull --ff-only` on Nora before
+`run-dakota-apm-build.sh` executes the script from **Nora's** `/root/warden` mirror, not
+the VM repo. Commit on the VM, then `git -C /root/warden pull --ff-only` on Nora before
 rebuilding.
 
 ## Bind account cannot search

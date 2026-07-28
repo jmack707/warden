@@ -1,7 +1,7 @@
 when ACCESS_POLICY_AGENT_EVENT {
     if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
         set cn [ACCESS::session data get session.custom.cn]
-        set tok [class lookup token pua_openbao_dg]
+        set tok [class lookup token warden_openbao_dg]
         if { $cn eq "" } { return }
         if { $tok eq "" } { return }
 
@@ -15,7 +15,7 @@ when ACCESS_POLICY_AGENT_EVENT {
 
         set c2 [connect -timeout 3000 -idle 5 10.2.20.30:8200]
         if { $c2 eq "" } {
-            ACCESS::session data set session.custom.pua.fetch_err "connect-failed"
+            ACCESS::session data set session.custom.warden.fetch_err "connect-failed"
             return
         }
         set g "GET /v1/ldap/static-cred/$cn HTTP/1.1\r\nHost: 10.2.20.30\r\nX-Vault-Token: $tok\r\nConnection: close\r\n\r\n"
@@ -29,9 +29,9 @@ when ACCESS_POLICY_AGENT_EVENT {
         close $c2
 
         if { [regexp {"password":"([^"]+)"} $resp all pw] } {
-            ACCESS::session data set session.custom.pua.password $pw
+            ACCESS::session data set session.custom.warden.password $pw
         } else {
-            ACCESS::session data set session.custom.pua.fetch_err "parse-failed"
+            ACCESS::session data set session.custom.warden.fetch_err "parse-failed"
         }
     }
 }

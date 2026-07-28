@@ -6,7 +6,7 @@ Environment-specific deployment against the Dakota BIG-IP pair (`bigipa` 10.2.1.
 _Last validated: 2026-07 against TMOS 21.1.0 (bigipa/bigipb HA pair, In-Sync)._
 
 ## Preconditions
-- APM is provisioned and licensed on **both** units (incl. the PUA endpoint license).
+- APM is provisioned and licensed on **both** units (incl. the Warden endpoint license).
 - The BIG-IP admin password is fetched at runtime via the lab OpenBao f5-onboard AppRole —
   it is **never** stored in `.env` (`BIGIP_PASS` there is empty by design).
 - `admin`/`root` stay local on both units; this deployment never modifies them.
@@ -16,7 +16,7 @@ _Last validated: 2026-07 against TMOS 21.1.0 (bigipa/bigipb HA pair, In-Sync)._
 BIGIP_PASS=<bigipa-admin-pw> bigip/phase1-target-rest.sh
 ```
 This installs the CA, `auth ldap system-auth` (LDAPS, CA-verified, bind `cn=bigip-bind`),
-`remote-role pua_admins`, and flips the auth source to LDAP. The final auth-source flip may
+`remote-role warden_admins`, and flips the auth source to LDAP. The final auth-source flip may
 be blocked by the harness auto-mode guard — if so, an operator runs the printed command.
 
 Verify (GATE 1B):
@@ -38,7 +38,7 @@ client cert), the APM AAA LDAP pool + server, the policy graph
 → Allow/Deny), form SSO, webtop, both shadow façade VSs + Portal Access resources, and the
 test VIP `10.2.20.50`.
 
-> The build runs from **Nora's** `/root/pua-oss` mirror, not the VM repo. Commit on the VM
+> The build runs from **Nora's** `/root/warden` mirror, not the VM repo. Commit on the VM
 > and `git pull` on Nora before building, or your script edits will not take effect.
 
 ## Step 3 — Guacamole connection (clientless SSH path)
@@ -48,7 +48,7 @@ scripts/configure-guacamole.sh
 
 ## Verification
 ```bash
-cd /root/pua-oss/certs/clients
+cd /root/warden/certs/clients
 for u in alice.admin bob.user carol.expired; do
   curl -sk --cert $u.crt --key $u.key -o /dev/null -w "$u %{http_code}\n" -L https://10.2.20.50/
 done

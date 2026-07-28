@@ -7,12 +7,12 @@ set -a; . "${HERE}/../.env"; set +a
 cd "${HERE}/../certs"
 
 openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
-  -keyout ca.key -out ca.crt -subj "/CN=PUA Lab CA"
+  -keyout ca.key -out ca.crt -subj "/CN=Warden Lab CA"
 
 openssl req -newkey rsa:2048 -nodes \
-  -keyout ldap.key -out ldap.csr -subj "/CN=openldap.pua.lab"
+  -keyout ldap.key -out ldap.csr -subj "/CN=openldap.warden.lab"
 
-printf 'subjectAltName=DNS:openldap.pua.lab,DNS:openldap,IP:%s\n' "${LAB_HOST_IP}" > san.cnf
+printf 'subjectAltName=DNS:openldap.warden.lab,DNS:openldap,IP:%s\n' "${LAB_HOST_IP}" > san.cnf
 
 openssl x509 -req -in ldap.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -days 365 -extfile san.cnf -out ldap.crt

@@ -10,13 +10,13 @@ _Last validated: 2026-07 against OpenBao 2.x, Guacamole 1.6.0, TMOS 21.1.0._
 |---|---|---|---|
 | `/v1/sys/health` | GET | install verification | `initialized`/`sealed` status |
 | `/v1/auth/approle/login` | POST | lab AppRole (BIG-IP admin pw fetch) | returns a client token |
-| `ldap/creds/pua-admin` | GET (read) | `issue-cred.sh` | mints an ephemeral leased LDAP user |
+| `ldap/creds/warden-admin` | GET (read) | `issue-cred.sh` | mints an ephemeral leased LDAP user |
 | `ldap/static-role/<CN>` | POST (write) | `configure-openbao-static.sh` | define a static role over an `ou=users` account |
 | `ldap/static-cred/<CN>` | GET (read) | APM iRule fetch | current username + rotated password |
 | `ldap/rotate-role/<CN>` | POST (write) | APM iRule fetch, `revoke-all.sh` | force a fresh password rotation |
 | `sys/leases/revoke` | PUT | `revoke-cred.sh` | revoke an ephemeral lease → deletes the LDAP entry |
 
-The APM iRule reaches OpenBao with a **scoped token** (policy `pua-apm-read`) that can read
+The APM iRule reaches OpenBao with a **scoped token** (policy `warden-apm-read`) that can read
 only `ldap/static-cred/*` and `ldap/rotate-role/*`.
 
 ## Guacamole (`http://<lab-host-ip>:8080/guacamole`)

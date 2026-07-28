@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GATE 1B (automatable subset) — run AFTER the operator flips bigipa auth source to
 # ldap. Proves an ephemeral credential authenticates to bigipa for both the GUI/TMUI
-# path (iControl REST honours the same remote LDAP auth) and SSH, that a non-pua-admins
+# path (iControl REST honours the same remote LDAP auth) and SSH, that a non-warden-admins
 # user is denied, that revoke ends auth, and that local admin still works (recovery).
 #
 # Requires: BIGIP_PASS in env (local-admin cred, from lab OpenBao) for the recovery check.
@@ -17,8 +17,8 @@ bao(){ docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="${BAO_TOKE
 
 command -v sshpass >/dev/null || { echo "installing sshpass..."; apt-get install -y -qq sshpass >/dev/null 2>&1; }
 
-echo "== issue an ephemeral pua-admins credential =="
-CRED="$(bao read -format=json ldap/creds/pua-admin)"
+echo "== issue an ephemeral warden-admins credential =="
+CRED="$(bao read -format=json ldap/creds/warden-admin)"
 U="$(jq -r .data.username <<<"$CRED")"; PW="$(jq -r .data.password <<<"$CRED")"; LEASE="$(jq -r .lease_id <<<"$CRED")"
 echo "  uid=$U"
 
@@ -31,7 +31,7 @@ out=$(sshpass -p "$PW" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 \
         "$U@${BIGIP_MGMT}" 'show sys version' 2>&1 | head -3)
 grep -qiE "Sys::Version|BIG-IP|21\.1" <<<"$out" && ok "SSH tmsh landing works" || no "SSH failed: $out"
 
-echo "== 3. negative: user WITHOUT employeeType=pua-admins is denied =="
+echo "== 3. negative: user WITHOUT employeeType=warden-admins is denied =="
 NEG="neg-$(date +%s 2>/dev/null || echo x)$RANDOM"
 cat > /tmp/neg.ldif <<EOF
 dn: uid=${NEG},ou=users,${BASE_DN}
@@ -43,7 +43,7 @@ userPassword: NegTest1!
 EOF
 ldapadd -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -f /tmp/neg.ldif >/dev/null 2>&1
 ncode=$(curl -sk -o /dev/null -w '%{http_code}' -u "$NEG:NegTest1!" "$B/mgmt/tm/sys/version")
-[ "$ncode" = 401 ] && ok "non-pua-admins denied (401)" || no "non-member got $ncode (expected 401)"
+[ "$ncode" = 401 ] && ok "non-warden-admins denied (401)" || no "non-member got $ncode (expected 401)"
 ldapdelete -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" "uid=${NEG},ou=users,${BASE_DN}" >/dev/null 2>&1
 rm -f /tmp/neg.ldif
 
@@ -67,6 +67,6 @@ fi
 
 echo
 echo "GATE 1B (automatable subset): ${pass} passed, ${fail} failed."
-echo "Remaining [HUMAN]: Guacamole SSH connection in the web UI (T1.8), lease-expiry"
+echo "Remaining [HUMAN]: SSH login with an issued credential (own client), lease-expiry"
 echo "auto-delete at default_ttl, and /var/log/secure event review on bigipa."
 [ "$fail" -eq 0 ]

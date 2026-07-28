@@ -49,13 +49,13 @@ curl "${AUTH[@]}" -X POST \
   --data-binary @"$CA" \
   "$B/mgmt/shared/file-transfer/uploads/ca.crt" -o /dev/null -w '  upload HTTP %{http_code}\n'
 
-step "0c. install cert object pua-lab-ca.crt"
+step "0c. install cert object warden-ca.crt"
 # create-or-update the sys file ssl-cert
-if curl "${AUTH[@]}" "$B/mgmt/tm/sys/file/ssl-cert/pua-lab-ca.crt" | jqok '.name'; then
+if curl "${AUTH[@]}" "$B/mgmt/tm/sys/file/ssl-cert/warden-ca.crt" | jqok '.name'; then
   echo "  cert object already exists — skipping create"
 else
   req POST "$B/mgmt/tm/sys/file/ssl-cert" \
-    '{"name":"pua-lab-ca.crt","sourcePath":"file:/var/config/rest/downloads/ca.crt"}' >/dev/null
+    '{"name":"warden-ca.crt","sourcePath":"file:/var/config/rest/downloads/ca.crt"}' >/dev/null
 fi
 
 step "1. create/replace auth ldap system-auth"
@@ -65,7 +65,7 @@ LDAP_BODY="$(jq -n \
   --arg bpw "${BIND_PW}" \
   --arg sbd "ou=users,${BASE_DN}" \
   '{name:"system-auth",servers:[$srv],port:636,ssl:"enabled",
-    sslCaCertFile:"pua-lab-ca.crt",bindDn:$bdn,bindPw:$bpw,
+    sslCaCertFile:"warden-ca.crt",bindDn:$bdn,bindPw:$bpw,
     searchBaseDn:$sbd,loginAttribute:"uid"}')"
 if curl "${AUTH[@]}" "$B/mgmt/tm/auth/ldap/system-auth" | jqok '.name'; then
   req PATCH "$B/mgmt/tm/auth/ldap/system-auth" "$LDAP_BODY" >/dev/null
@@ -81,10 +81,10 @@ step "2. remote-user: default = guest (read-only), console disabled"
 req PATCH "$B/mgmt/tm/auth/remote-user" \
   '{"defaultRole":"guest","remoteConsoleAccess":"disabled"}' >/dev/null
 
-step "3. remote-role role-info pua_admins (employeeType=pua-admins -> administrator)"
-RR_BODY='{"name":"pua_admins","attribute":"employeeType=pua-admins","role":"administrator","userPartition":"All","console":"tmsh","lineOrder":1}'
-if curl "${AUTH[@]}" "$B/mgmt/tm/auth/remote-role/role-info/pua_admins" | jqok '.name'; then
-  req PATCH "$B/mgmt/tm/auth/remote-role/role-info/pua_admins" "$RR_BODY" >/dev/null
+step "3. remote-role role-info warden_admins (employeeType=warden-admins -> administrator)"
+RR_BODY='{"name":"warden_admins","attribute":"employeeType=warden-admins","role":"administrator","userPartition":"All","console":"tmsh","lineOrder":1}'
+if curl "${AUTH[@]}" "$B/mgmt/tm/auth/remote-role/role-info/warden_admins" | jqok '.name'; then
+  req PATCH "$B/mgmt/tm/auth/remote-role/role-info/warden_admins" "$RR_BODY" >/dev/null
 else
   req POST  "$B/mgmt/tm/auth/remote-role/role-info" "$RR_BODY" >/dev/null
 fi

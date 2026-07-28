@@ -1,6 +1,6 @@
 # Production OpenBao config (replaces `server -dev`). Integrated raft storage = state
 # PERSISTS across container restart AND recreate (the dev mode's fatal flaw). Started with
-# `server -config=/pua/openbao-prod.hcl`; OpenBao boots SEALED and must be unsealed
+# `server -config=/warden/openbao-prod.hcl`; OpenBao boots SEALED and must be unsealed
 # (scripts/openbao-init-unseal.sh) before it serves.
 #
 # Listener stays HTTP on the trusted internal VLAN (10.2.20.0/24) so the APM iRule sideband,
@@ -14,7 +14,7 @@ ui = true
 
 storage "raft" {
   path    = "/openbao/data"     # persisted volume (see docker-compose.prod.yml)
-  node_id = "pua-openbao-1"
+  node_id = "warden-openbao-1"
 }
 
 listener "tcp" {

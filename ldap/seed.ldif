@@ -1,12 +1,12 @@
-dn: ou=users,dc=pua,dc=lab
+dn: ou=users,dc=warden,dc=lab
 objectClass: organizationalUnit
 ou: users
 
-dn: ou=svc,dc=pua,dc=lab
+dn: ou=svc,dc=warden,dc=lab
 objectClass: organizationalUnit
 ou: svc
 
-dn: cn=bigip-bind,ou=svc,dc=pua,dc=lab
+dn: cn=bigip-bind,ou=svc,dc=warden,dc=lab
 objectClass: inetOrgPerson
 cn: bigip-bind
 sn: service

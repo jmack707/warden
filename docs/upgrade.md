@@ -6,8 +6,8 @@ _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x._
 The APM build is idempotent and teardown-first, so an upgrade is a re-run:
 ```bash
 # commit script changes on the VM, then sync the Nora mirror it builds from:
-git -C /root/pua-oss pull --ff-only
-bash /root/pua-oss/bigip/run-dakota-apm-build.sh
+git -C /root/warden pull --ff-only
+bash /root/warden/bigip/run-dakota-apm-build.sh
 ```
 Verify with the matrix in [deploy.md](deploy.md#verification).
 
@@ -17,8 +17,8 @@ tears down the mutable graph first). To back out entirely, delete the test VS an
 profile:
 ```bash
 # via iControl REST as admin (pw from AppRole):
-curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/ltm/virtual/~Common~pua-apm-test-vs
-curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/apm/profile/access/~Common~pua-apm
+curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/ltm/virtual/~Common~warden-apm-test-vs
+curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/apm/profile/access/~Common~warden-apm
 ```
 
 ## OpenBao dev → production cutover
@@ -36,7 +36,7 @@ path still resolves. Until then, the internal VLAN is the control.
 
 ## Teardown
 ```bash
-cd /root/pua-oss
+cd /root/warden
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml down   # stop stack
 # to also drop persisted state (IRREVERSIBLE): add -v to remove the raft/ldap/guac volumes
 ```

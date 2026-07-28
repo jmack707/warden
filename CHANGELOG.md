@@ -1,11 +1,11 @@
 # Changelog
 
-Notable changes to the pua-oss lab build. Dates are absolute. Per-change lab specifics and
+Notable changes to the warden lab build. Dates are absolute. Per-change lab specifics and
 gotchas are in [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
 ## 2026-07-28
 ### Added
-- Configurable credential model on the operator/issue path: `PUA_CRED_MODE`
+- Configurable credential model on the operator/issue path: `WARDEN_CRED_MODE`
   (`ephemeral`|`static`) behind a shared `scripts/lib/cred.sh` abstraction
   (`cred_issue`/`cred_revoke`); `issue-cred.sh`/`revoke-cred.sh` refactored onto it. Both
   modes verified end-to-end (issue → SSH login → revoke → denied)
@@ -48,5 +48,5 @@ gotchas are in [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr
 
 ## 2026-07-10
 ### Added
-- Initial hybrid OSS PUA design and repo scaffold
-  ([ADR 0001](docs/adr/0001-hybrid-oss-pua-design.md)).
+- Initial hybrid OSS Warden design and repo scaffold
+  ([ADR 0001](docs/adr/0001-hybrid-oss-warden-design.md)).

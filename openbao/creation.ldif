@@ -1,7 +1,7 @@
-dn: uid={{.Username}},ou=users,dc=pua,dc=lab
+dn: uid={{.Username}},ou=users,dc=warden,dc=lab
 objectClass: inetOrgPerson
 uid: {{.Username}}
 cn: {{.Username}}
 sn: ephemeral
-employeeType: pua-admins
+employeeType: warden-admins
 userPassword: {{.Password}}

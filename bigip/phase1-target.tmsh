@@ -12,24 +12,24 @@
 #-----------------------------------------------------------------------------
 
 # 0. Human: copy certs/ca.crt to /var/tmp/ca.crt on bigipa (scp or REST upload), then:
-create sys file ssl-cert pua-lab-ca.crt { source-path file:/var/tmp/ca.crt }
+create sys file ssl-cert warden-ca.crt { source-path file:/var/tmp/ca.crt }
 
 create auth ldap system-auth {
     servers { 10.2.20.30 }
     port 636
     ssl enabled
-    ssl-ca-cert-file pua-lab-ca.crt
-    bind-dn "cn=bigip-bind,ou=svc,dc=pua,dc=lab"
+    ssl-ca-cert-file warden-ca.crt
+    bind-dn "cn=bigip-bind,ou=svc,dc=warden,dc=lab"
     bind-pw "<BIND_PW>"
-    search-base-dn "ou=users,dc=pua,dc=lab"
+    search-base-dn "ou=users,dc=warden,dc=lab"
     login-attribute uid
 }
 
 modify auth remote-user { default-role no-access remote-console-access disabled }
 
 modify auth remote-role role-info add {
-    pua_admins {
-        attribute "employeeType=pua-admins"
+    warden_admins {
+        attribute "employeeType=warden-admins"
         role administrator
         user-partition All
         console tmsh

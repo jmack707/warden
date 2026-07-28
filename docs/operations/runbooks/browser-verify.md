@@ -12,7 +12,7 @@ After any APM rebuild ([../../deploy.md](../../deploy.md)) or authorization chan
 ## Procedure
 1. On the operator workstation, import the test client certs:
    ```bash
-   scripts/import-browser-certs.sh      # p12 pass: pua  (alice.admin.p12 also accepts: alice)
+   scripts/import-browser-certs.sh      # p12 pass: warden  (alice.admin.p12 also accepts: alice)
    ```
 2. Browse to `https://10.2.20.50/` and select the **alice.admin** certificate.
 3. On the webtop, click the **bigipa TMUI** bookmark, then the **bigipb TMUI** bookmark.

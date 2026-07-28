@@ -12,8 +12,8 @@ BIG-IP* should decide the role — `bigip-admins` → administrator, everyone el
 ## Decision
 - APM LDAP query becomes identity-only: `(uid=%{session.custom.cn})`. Existence, not
   membership, is the APM gate.
-- The target BIG-IP does authorization via remote-role: `remote-role pua_admins` matches
-  `employeeType=pua-admins` → Administrator; `remote-user default-role` is set to **guest**
+- The target BIG-IP does authorization via remote-role: `remote-role warden_admins` matches
+  `employeeType=warden-admins` → Administrator; `remote-user default-role` is set to **guest**
   (read-only) for everyone else. Applied on both units (device-local, not synced).
 
 This is still group-based authorization: `bigip-admins` members carry the `employeeType`

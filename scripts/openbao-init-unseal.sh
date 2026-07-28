@@ -23,7 +23,7 @@ bao(){ docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 openbao bao "$@"; }
 # The openbao image runs as uid 100 / gid 1000; a freshly-created raft/log volume is
 # root-owned, so the server crash-loops on "vault.db: permission denied". Fix perms up
 # front (idempotent — a no-op once owned). Named per the compose project prefix.
-for vol in pua-oss_openbaodata pua-oss_openbaologs; do
+for vol in warden_openbaodata warden_openbaologs; do
   docker volume inspect "$vol" >/dev/null 2>&1 && \
     docker run --rm -v "${vol}:/v" busybox chown -R 100:1000 /v >/dev/null 2>&1 || true
 done

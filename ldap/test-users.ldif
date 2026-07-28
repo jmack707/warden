@@ -10,44 +10,44 @@
 #
 # Apply after the memberof overlay:
 #   envsubst < ldap/test-users.ldif | ldapadd -x -H ldap://$LAB_HOST_IP -D cn=admin,$BASE_DN -w $LDAP_ADMIN_PW
-dn: ou=people,dc=pua,dc=lab
+dn: ou=people,dc=warden,dc=lab
 objectClass: organizationalUnit
 ou: people
 
-dn: ou=groups,dc=pua,dc=lab
+dn: ou=groups,dc=warden,dc=lab
 objectClass: organizationalUnit
 ou: groups
 
-dn: uid=alice.admin,ou=people,dc=pua,dc=lab
+dn: uid=alice.admin,ou=people,dc=warden,dc=lab
 objectClass: inetOrgPerson
 uid: alice.admin
 cn: alice.admin
 sn: Admin
 givenName: Alice
-mail: alice.admin@pua.lab
+mail: alice.admin@warden.lab
 userPassword: ${TEST_USER_PW}
 
-dn: uid=bob.user,ou=people,dc=pua,dc=lab
+dn: uid=bob.user,ou=people,dc=warden,dc=lab
 objectClass: inetOrgPerson
 uid: bob.user
 cn: bob.user
 sn: User
 givenName: Bob
-mail: bob.user@pua.lab
+mail: bob.user@warden.lab
 userPassword: ${TEST_USER_PW}
 
-dn: uid=carol.expired,ou=people,dc=pua,dc=lab
+dn: uid=carol.expired,ou=people,dc=warden,dc=lab
 objectClass: inetOrgPerson
 uid: carol.expired
 cn: carol.expired
 sn: Expired
 givenName: Carol
-mail: carol.expired@pua.lab
+mail: carol.expired@warden.lab
 userPassword: ${TEST_USER_PW}
 
-dn: cn=bigip-admins,ou=groups,dc=pua,dc=lab
+dn: cn=bigip-admins,ou=groups,dc=warden,dc=lab
 objectClass: groupOfNames
 cn: bigip-admins
 description: BIG-IP Admin — members map to the administrator role
-member: uid=alice.admin,ou=people,dc=pua,dc=lab
-member: uid=carol.expired,ou=people,dc=pua,dc=lab
+member: uid=alice.admin,ou=people,dc=warden,dc=lab
+member: uid=carol.expired,ou=people,dc=warden,dc=lab

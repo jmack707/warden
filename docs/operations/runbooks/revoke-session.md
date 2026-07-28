@@ -1,4 +1,4 @@
-# Runbook — Revoke a PUA session everywhere (kill switch)
+# Runbook — Revoke a Warden session everywhere (kill switch)
 
 End a principal's access: invalidate future logins and cut any live TMUI/SSH session.
 
@@ -12,11 +12,11 @@ APM and Guacamole steps.
 ## Procedure
 Run on **Nora** (fetches the BIG-IP admin pw via AppRole):
 ```bash
-bash /root/pua-oss/bigip/run-revoke.sh --cn <CN>
+bash /root/warden/bigip/run-revoke.sh --cn <CN>
 ```
 Optionally target a specific live session / tunnel:
 ```bash
-bash /root/pua-oss/bigip/run-revoke.sh --cn <CN> --apm-key <session-key> --guac-id <uuid>
+bash /root/warden/bigip/run-revoke.sh --cn <CN> --apm-key <session-key> --guac-id <uuid>
 ```
 To also revoke an ephemeral Phase-1 lease, add `--lease <lease_id>`.
 

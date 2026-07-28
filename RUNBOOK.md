@@ -1,4 +1,4 @@
-# PUA-OSS — Two-Phase Build & Deploy Runbook (v3, Claude Code edition)
+# Warden — Two-Phase Build & Deploy Runbook (v3, Claude Code edition)
 
 > **AS-BUILT:** this is the original build plan. For what is actually deployed now
 > (deviations 1–16 applied), see **ARCHITECTURE.md**; per-change rationale in DEVIATIONS.md.
@@ -36,8 +36,8 @@ Open-source replacement for F5 PUA (Privileged User Access), hybrid design:
 - **T1.4 [AGENT]** `ldap/seed.ldif` — ou=users, ou=svc, cn=bigip-bind. Acceptance:
   ldapsearch returns all three entries.
 - **T1.5 [AGENT]** `scripts/configure-openbao.sh` — pw policy, ldap/config, role
-  pua-admin (ttl 15m/max 1h). Acceptance: `bao read ldap/creds/pua-admin` returns
-  username/password/lease_id; entry visible via ldapsearch with employeeType=pua-admins;
+  warden-admin (ttl 15m/max 1h). Acceptance: `bao read ldap/creds/warden-admin` returns
+  username/password/lease_id; entry visible via ldapsearch with employeeType=warden-admins;
   `ldapwhoami` over LDAPS with the issued creds succeeds (simulates the BIG-IP bind).
 - **T1.6 [AGENT]** `scripts/{issue-cred,revoke-cred,validate-phase1}.sh`.
 - **GATE 1A [AGENT]:** `validate-phase1.sh` passes end-to-end, no BIG-IP. Do not start T1.7 until it does.
@@ -46,7 +46,7 @@ Open-source replacement for F5 PUA (Privileged User Access), hybrid design:
 - **T1.8 [HUMAN]** Guacamole SSH connection + end-to-end test (issue cred -> SSH + TMUI within TTL).
 - **GATE 1B (exit) [HUMAN verifies, AGENT checklist]:** one credential works for both
   SSH and TMUI in TTL; auto-deleted at expiry (both logins then fail); revoke deletes
-  immediately; non-`pua-admins` user gets no-access; local admin works with the whole
+  immediately; non-`warden-admins` user gets no-access; local admin works with the whole
   stack stopped; issuance/revocation in the audit log, BIG-IP events in /var/log/secure.
 - **Rollback (human):** `modify auth source { type local }` -> `save sys config`.
   `docker-compose down -v` removes the stack.
@@ -58,7 +58,7 @@ artifact generation + verification support, not direct execution (VPE/GUI, versi
   fetch options by TMOS version, session-kill wiring (`scripts/revoke-all.sh`, APM step stubbed).
 - **T2.2 [AGENT]** Scoped OpenBao policy + token/AppRole for the APM fetch path (root
   token never embedded in a BIG-IP object). Optional CAC-attributed OIDC skeleton.
-- **GATE 2A [AGENT]:** scoped token reads `ldap/creds/pua-admin`; root-token paths fail.
+- **GATE 2A [AGENT]:** scoped token reads `ldap/creds/warden-admin`; root-token paths fail.
 - **T2.3 [HUMAN]** Build APM objects in VPE (ODCA, OpenBao fetch, form SSO, webtop).
 - **T2.4 [HUMAN + AGENT]** Phase 2 exit criteria (CAC -> webtop, injected TMUI login,
   SSH via Guacamole, APM session delete cuts TMUI, `revoke-all.sh` ends all three,

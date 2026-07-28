@@ -10,18 +10,18 @@ bao() { docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="${BAO_TOK
 
 bao secrets enable ldap || true
 
-bao write sys/policies/password/pua-ephemeral policy=@/pua/pw-policy.hcl
+bao write sys/policies/password/warden-ephemeral policy=@/warden/pw-policy.hcl
 
 # bind to OpenLDAP over the compose network (service name), admin bind creates users
 bao write ldap/config \
   binddn="cn=admin,${BASE_DN}" bindpass="${LDAP_ADMIN_PW}" \
-  url="ldap://openldap:389" schema=openldap password_policy=pua-ephemeral
+  url="ldap://openldap:389" schema=openldap password_policy=warden-ephemeral
 
-bao write ldap/role/pua-admin \
-  creation_ldif=@/pua/creation.ldif \
-  deletion_ldif=@/pua/deletion.ldif \
-  rollback_ldif=@/pua/rollback.ldif \
-  username_template='pua-{{random 10 | lowercase}}' \
+bao write ldap/role/warden-admin \
+  creation_ldif=@/warden/creation.ldif \
+  deletion_ldif=@/warden/deletion.ldif \
+  rollback_ldif=@/warden/rollback.ldif \
+  username_template='warden-{{random 10 | lowercase}}' \
   default_ttl=15m max_ttl=1h
 
 # Audit device is declared in openbao.hcl (2.x no longer allows API enablement);
@@ -29,4 +29,4 @@ bao write ldap/role/pua-admin \
 echo "== audit devices =="
 bao audit list || echo "WARN: no audit device — check openbao.hcl / -config"
 
-echo "==> OpenBao LDAP secrets engine configured (role: ldap/creds/pua-admin)"
+echo "==> OpenBao LDAP secrets engine configured (role: ldap/creds/warden-admin)"
