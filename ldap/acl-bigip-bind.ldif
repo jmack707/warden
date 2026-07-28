@@ -1,8 +1,10 @@
-# Grant the BIG-IP bind account read access to the ephemeral-user subtree.
-# osixia/openldap ships a deny-all catch-all ACL ({2} "by * none"), so cn=bigip-bind
-# (a plain inetOrgPerson) cannot search ou=users and BIG-IP's user-DN lookup fails
-# with "No such object (32)". This inserts a read grant for bigip-bind BEFORE the
-# catch-all, and AFTER the userPassword rule so password reads stay protected.
+# Grant the BIG-IP bind account read access across the directory base. osixia/openldap
+# ships a deny-all catch-all, so cn=bigip-bind (a plain inetOrgPerson) otherwise cannot
+# search and lookups fail with "No such object (32)". The grant covers the WHOLE base so
+# both paths work: system-auth binds/searches ou=users (SSH/TMUI direct login) and the
+# APM AAA identity query searches ou=people. It sits BEFORE the catch-all and AFTER the
+# userPassword rule ({1}), so bigip-bind reads uid/employeeType/memberOf but NEVER
+# userPassword.
 #
 # Applied against cn=config over ldapi (EXTERNAL) — cn=config is not reachable with
 # the directory admin bind:
@@ -12,5 +14,5 @@ changetype: modify
 replace: olcAccess
 olcAccess: {0}to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
 olcAccess: {1}to attrs=userPassword,shadowLastChange by self write by dn="cn=admin,dc=warden,dc=lab" write by anonymous auth by * none
-olcAccess: {2}to dn.subtree="ou=users,dc=warden,dc=lab" by dn.exact="cn=bigip-bind,ou=svc,dc=warden,dc=lab" read by self read by dn="cn=admin,dc=warden,dc=lab" write by * none
+olcAccess: {2}to dn.subtree="dc=warden,dc=lab" by dn.exact="cn=bigip-bind,ou=svc,dc=warden,dc=lab" read by self read by dn="cn=admin,dc=warden,dc=lab" write by * none
 olcAccess: {3}to * by self read by dn="cn=admin,dc=warden,dc=lab" write by * none

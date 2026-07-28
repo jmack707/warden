@@ -37,6 +37,11 @@ echo "== 4/7 configure OpenBao (LDAP secrets engine + audit) =="
 
 echo "== 5/7 test principals + client certs, static roles for injection =="
 ./scripts/gen-test-users.sh "${BASE_DN}" seed
+# ou=users privileged ACCESS accounts (alice=admin via employeeType, bob=non-admin); OpenBao
+# rotates their password and the BIG-IP binds it. Distinct from the ou=people identities above.
+for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
+  ldapadd -x -c -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -f "$ldif" 2>&1 | grep -viE "^adding|already exists" || true
+done
 ./scripts/configure-openbao-static.sh alice.admin bob.user
 ./scripts/configure-openbao-phase2.sh   # scoped token policy for the APM fetch
 

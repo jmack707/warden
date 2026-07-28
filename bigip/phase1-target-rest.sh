@@ -38,7 +38,7 @@ req() { # req METHOD URL JSON
 step "0a. pre-flight: bigipa -> ${WARDEN_HOST_IP}:636 reachability (mgmt plane)"
 PF="$(req POST "$B/mgmt/tm/util/bash" \
   "{\"command\":\"run\",\"utilCmdArgs\":\"-c 'echo | openssl s_client -connect ${WARDEN_HOST_IP}:636 -CAfile /var/tmp/ca.crt 2>&1 | grep -E \\\"Verify return code|subject=\\\" | head -3'\"}")"
-echo "$PF" | jq -r '.commandResult // "(no output)"'
+echo "$PF" | grep -o '{.*}' | jq -r '.commandResult // "(no output)"' 2>/dev/null || echo "  (pre-flight diagnostic only — continuing)"
 
 step "0b. upload CA cert to /var/config/rest/downloads/ca.crt"
 # small file: single chunk upload
