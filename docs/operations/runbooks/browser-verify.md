@@ -36,5 +36,5 @@ that is the SSO step: pull the **websso** log on bigipa (`/var/log/apm`) and see
 
 ## Escalation
 Persistent failure after a retry: capture the effective URL, the on-screen error/session
-reference number, and bigipa `/var/log/apm` (websso lines), then raise with the lab operator
-(jmack).
+reference number, and bigipa `/var/log/apm` (websso lines), then raise with the operator
+.

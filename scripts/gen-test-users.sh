@@ -17,7 +17,7 @@ docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// -c \
 
 echo "== 2. add ou=people/ou=groups, users, bigip-admins group =="
 envsubst < "${HERE}/../ldap/test-users.ldif" \
-  | ldapadd -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -c 2>&1 \
+  | ldapadd -x -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -c 2>&1 \
   | grep -viE "^adding" || true
 
 echo "== 3. issue client certs (CN=uid), signed by the Warden Lab CA =="
@@ -66,6 +66,6 @@ set -e
 echo "  -- memberOf (alice+carol in bigip-admins; bob none) --"
 for u in alice.admin bob.user carol.expired; do
   printf '  %-14s memberOf=' "$u"
-  ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
+  ldapsearch -x -LLL -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
     -b "uid=$u,ou=people,${BASE_DN}" memberOf 2>/dev/null | grep -i "^memberOf:" | sed 's/memberOf: //' | paste -sd, || echo "(none)"
 done

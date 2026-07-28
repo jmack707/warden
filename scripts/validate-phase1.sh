@@ -21,7 +21,7 @@ LEASE_ID="$(jq -r '.lease_id'      <<<"$CRED_JSON")"
 ok "issued uid=$USERNAME (lease $LEASE_ID)"
 
 echo "== 2. directory entry present with employeeType=warden-admins =="
-ENTRY="$(ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" \
+ENTRY="$(ldapsearch -x -LLL -H "ldap://${WARDEN_HOST_IP}" \
   -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
   -b "ou=users,${BASE_DN}" "(uid=${USERNAME})" uid employeeType)"
 grep -q "uid: ${USERNAME}" <<<"$ENTRY" || fail "entry not found in directory"
@@ -30,7 +30,7 @@ ok "entry present, employeeType=warden-admins"
 
 echo "== 3. bind over LDAPS (simulates the BIG-IP auth bind, TLS validated) =="
 WHO="$(LDAPTLS_CACERT="$CA" ldapwhoami -x \
-  -H "ldaps://${LAB_HOST_IP}" \
+  -H "ldaps://${WARDEN_HOST_IP}" \
   -D "uid=${USERNAME},ou=users,${BASE_DN}" -w "${PASSWORD}")"
 grep -q "uid=${USERNAME}" <<<"$WHO" || fail "LDAPS bind failed (got: $WHO)"
 ok "LDAPS bind succeeded: $WHO"
@@ -42,14 +42,14 @@ ok "revoked $LEASE_ID"
 echo "== 5. entry gone after revoke (revocation is async — poll up to 10s); bind then fails =="
 GONE=""
 for _ in $(seq 1 10); do
-  GONE="$(ldapsearch -x -LLL -H "ldap://${LAB_HOST_IP}" \
+  GONE="$(ldapsearch -x -LLL -H "ldap://${WARDEN_HOST_IP}" \
     -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
     -b "ou=users,${BASE_DN}" "(uid=${USERNAME})" uid || true)"
   grep -q 'uid:' <<<"$GONE" || break
   sleep 1
 done
 [ -z "$(grep 'uid:' <<<"$GONE" || true)" ] || fail "entry still present 10s after revoke"
-if LDAPTLS_CACERT="$CA" ldapwhoami -x -H "ldaps://${LAB_HOST_IP}" \
+if LDAPTLS_CACERT="$CA" ldapwhoami -x -H "ldaps://${WARDEN_HOST_IP}" \
      -D "uid=${USERNAME},ou=users,${BASE_DN}" -w "${PASSWORD}" >/dev/null 2>&1; then
   fail "bind still succeeds after revoke"
 fi

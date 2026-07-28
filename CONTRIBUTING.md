@@ -1,29 +1,19 @@
 # Contributing
 
-This is a lab build. The rules below exist because breaking them has bitten us.
+The rules below exist because breaking them has bitten us.
 
 ## Secrets
 - Never commit `.env`, private keys (`certs/*.key`, `certs/clients/*`), issued passwords, or
   `openbao/.openbao-keys.json`. All are gitignored — keep them that way.
-- The BIG-IP admin password is fetched at runtime via the lab OpenBao f5-onboard AppRole.
-  `BIGIP_PASS` in `.env` is intentionally empty; do not populate it.
-
-## Repository topology (important)
-The canonical repo lives on the **warden VM** (`/root/warden`). **Nora** holds a mirror
-(also `/root/warden`) that the operator wrappers build from. The flow:
-```bash
-# author + commit on the VM (canonical), then sync the Nora mirror:
-git -C /root/warden pull --ff-only      # on Nora
-```
-`bigip/run-dakota-apm-build.sh` and `bigip/run-revoke.sh` run on Nora and use the mirror —
-a VM-only edit that is not committed+pulled will not take effect. This has caused "my change
-did nothing" more than once.
+- For the demo, `BIGIP_PASS` sits in `.env`. In production, leave it empty and inject it
+  from your secret manager at runtime — the wrappers preserve an injected value across the
+  `.env` source, so a real password never has to be written to disk.
 
 ## Changes to the BIG-IP
-- Builds are idempotent and teardown-first; re-run rather than hand-patch.
-- Live auth/network mutations may be blocked by the harness auto-mode guard — run them
-  through the Nora operator wrapper, or an operator applies the printed command.
-- `admin`/`root` and the local auth source are never modified.
+- Builds are idempotent and teardown-first; re-run `./bigip/run-apm-build.sh` rather than
+  hand-patch.
+- `./deploy.sh` orchestrates the whole flow; individual scripts are safe to run on their own.
+- `admin`/`root` and the local auth source are never modified — they are the recovery path.
 
 ## Documentation
 Docs follow the repository documentation standard (`doc-standard.json`, service preset). The

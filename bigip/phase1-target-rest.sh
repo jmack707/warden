@@ -2,7 +2,7 @@
 # T1.7 — Phase 1 target BIG-IP auth config via iControl REST. Mirrors
 # bigip/phase1-target.tmsh 1:1. Idempotent-ish (uses PUT/PATCH where possible).
 #
-# Requires env: BIGIP_MGMT, BIGIP_USER, BIGIP_PASS, BIND_PW, plus LAB_HOST_IP/BASE_DN
+# Requires env: BIGIP_MGMT, BIGIP_USER, BIGIP_PASS, BIND_PW, plus WARDEN_HOST_IP/BASE_DN
 # from .env. BIGIP_PASS is NOT stored in the repo — export it at run time (in the
 # Dakota lab it is sourced from the lab OpenBao at kv/bigip/common).
 #
@@ -35,9 +35,9 @@ req() { # req METHOD URL JSON
   echo "$body"
 }
 
-step "0a. pre-flight: bigipa -> ${LAB_HOST_IP}:636 reachability (mgmt plane)"
+step "0a. pre-flight: bigipa -> ${WARDEN_HOST_IP}:636 reachability (mgmt plane)"
 PF="$(req POST "$B/mgmt/tm/util/bash" \
-  "{\"command\":\"run\",\"utilCmdArgs\":\"-c 'echo | openssl s_client -connect ${LAB_HOST_IP}:636 -CAfile /var/tmp/ca.crt 2>&1 | grep -E \\\"Verify return code|subject=\\\" | head -3'\"}")"
+  "{\"command\":\"run\",\"utilCmdArgs\":\"-c 'echo | openssl s_client -connect ${WARDEN_HOST_IP}:636 -CAfile /var/tmp/ca.crt 2>&1 | grep -E \\\"Verify return code|subject=\\\" | head -3'\"}")"
 echo "$PF" | jq -r '.commandResult // "(no output)"'
 
 step "0b. upload CA cert to /var/config/rest/downloads/ca.crt"
@@ -60,7 +60,7 @@ fi
 
 step "1. create/replace auth ldap system-auth"
 LDAP_BODY="$(jq -n \
-  --arg srv "${LAB_HOST_IP}" \
+  --arg srv "${WARDEN_HOST_IP}" \
   --arg bdn "cn=bigip-bind,ou=svc,${BASE_DN}" \
   --arg bpw "${BIND_PW}" \
   --arg sbd "ou=users,${BASE_DN}" \
@@ -95,4 +95,4 @@ req PATCH "$B/mgmt/tm/auth/source" '{"type":"ldap"}' >/dev/null
 step "5. save sys config"
 req POST "$B/mgmt/tm/sys/config" '{"command":"save"}' >/dev/null
 
-echo; echo "T1.7 complete: bigipa now authenticates remote users against ${LAB_HOST_IP} over LDAPS."
+echo; echo "T1.7 complete: bigipa now authenticates remote users against ${WARDEN_HOST_IP} over LDAPS."

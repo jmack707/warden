@@ -6,7 +6,7 @@
 #   * sealed        -> unseal using the stored keys.
 #   * unsealed      -> no-op.
 #
-# Key custody (operator choice — see OPENBAO-PROD.md):
+# Key custody (operator choice — see docs/operations/runbooks/openbao-cutover.md):
 #   AUTO  : keep .openbao-keys.json on the VM; wire this script to run at boot (compose
 #           healthcheck / systemd unit) so the stack self-unseals after a reboot.
 #   MANUAL: after init, copy the keys OFF the VM, delete .openbao-keys.json, and run this

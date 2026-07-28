@@ -13,7 +13,6 @@ _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x._
 | OpenBao container crash-loops, log `disable_mlock ... dropped support` | `disable_mlock` in the prod HCL | [OpenBao crash-loops](#openbao-crash-loops) |
 | OpenBao container crash-loops, log `vault.db: permission denied` | Root-owned raft volume | [OpenBao crash-loops](#openbao-crash-loops) |
 | Script reaches the BIG-IP step then errors `BIGIP_PASS: export ...` | `.env` empty value clobbered the injected pw | [BIGIP_PASS unset mid-script](#bigip_pass-unset-mid-script) |
-| Script edit had no effect after `run-dakota-apm-build.sh` | Build runs from the Nora mirror | [Build ignored my edit](#build-ignored-my-edit) |
 | BIG-IP LDAP query fails `No such object (32)` for the bind account | osixia deny-all catch-all ACL | [Bind account cannot search](#bind-account-cannot-search) |
 | APM group branch always empty / user always denied on group | `memberOf` is operational, not returned | [memberOf never returned](#memberof-never-returned) |
 
@@ -54,15 +53,10 @@ Two distinct causes (`docker logs openbao`):
   `openbao-init-unseal.sh` now does this chown automatically on every run.
 
 ## BIGIP_PASS unset mid-script
-`.env` ships `BIGIP_PASS` empty on purpose. A script that sources `.env` after the wrapper
-injects the value will clobber it unless it preserves the incoming value across the source
-(the APM build and `revoke-all.sh` both do). Run BIG-IP-touching scripts through their Nora
-wrapper (`run-dakota-apm-build.sh`, `run-revoke.sh`), which injects the password correctly.
-
-## Build ignored my edit
-`run-dakota-apm-build.sh` executes the script from **Nora's** `/root/warden` mirror, not
-the VM repo. Commit on the VM, then `git -C /root/warden pull --ff-only` on Nora before
-rebuilding.
+If you inject `BIGIP_PASS` from a secret manager (leaving it empty in `.env`), a script that
+sources `.env` would clobber the injected value — the wrappers (`run-apm-build.sh`,
+`revoke-all.sh`) preserve it across the source, so run BIG-IP-touching work through them
+rather than the underlying scripts directly. For the demo, just set `BIGIP_PASS` in `.env`.
 
 ## Bind account cannot search
 osixia/openldap ships a deny-all catch-all ACL, so `cn=bigip-bind` cannot read `ou=users`
@@ -79,6 +73,5 @@ it. Authorization no longer depends on it anyway — see
 
 ## Escalation
 If a failure is not covered here: capture `docker logs openbao`, the target's `/var/log/apm`
-and `/var/log/secure`, and the exact command + output, then raise it with the lab operator
-(jmack). Do not force a live BIG-IP auth change to "unstick" a session — use the kill-switch
-runbook.
+and `/var/log/secure`, and the exact command + output. Do not force a live BIG-IP auth
+change to "unstick" a session — use the kill-switch runbook.

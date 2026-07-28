@@ -3,13 +3,13 @@
 The external interfaces this stack calls or exposes. Not a REST service of its own — these
 are the endpoints the build and runtime paths depend on.
 
-_Last validated: 2026-07 against OpenBao 2.x, Guacamole 1.6.0, TMOS 21.1.0._
+_Last validated: 2026-07 against OpenBao 2.x, TMOS 21.1.0._
 
-## OpenBao (`http://<lab-host-ip>:8200`)
+## OpenBao (`http://<WARDEN_HOST_IP>:8200`)
 | Path | Method | Used by | Notes |
 |---|---|---|---|
 | `/v1/sys/health` | GET | install verification | `initialized`/`sealed` status |
-| `/v1/auth/approle/login` | POST | lab AppRole (BIG-IP admin pw fetch) | returns a client token |
+| `/v1/auth/approle/login` | POST | optional: fetch BIG-IP admin pw from a secret manager | returns a client token |
 | `ldap/creds/warden-admin` | GET (read) | `issue-cred.sh` | mints an ephemeral leased LDAP user |
 | `ldap/static-role/<CN>` | POST (write) | `configure-openbao-static.sh` | define a static role over an `ou=users` account |
 | `ldap/static-cred/<CN>` | GET (read) | APM iRule fetch | current username + rotated password |
@@ -19,19 +19,11 @@ _Last validated: 2026-07 against OpenBao 2.x, Guacamole 1.6.0, TMOS 21.1.0._
 The APM iRule reaches OpenBao with a **scoped token** (policy `warden-apm-read`) that can read
 only `ldap/static-cred/*` and `ldap/rotate-role/*`.
 
-## Guacamole (`http://<lab-host-ip>:8080/guacamole`)
-| Path | Method | Used by | Notes |
-|---|---|---|---|
-| `/api/tokens` | POST | `configure-guacamole.sh`, `revoke-all.sh` | `username`+`password` form → `authToken` |
-| `/api/session/data/postgresql/activeConnections` | GET | `revoke-all.sh` | map of active-connection UUID → `{username, connectionIdentifier}` |
-| `/api/session/data/postgresql/activeConnections` | PATCH | `revoke-all.sh` | kill: body `[{"op":"remove","path":"/<uuid>"}]` (not DELETE) |
-| `/api/tokens/<token>` | DELETE | cleanup | revoke the admin token |
-
 ## BIG-IP (`https://<bigip-mgmt>/mgmt`)
 | Path | Method | Used by | Notes |
 |---|---|---|---|
 | `/tm/auth/ldap/system-auth`, `/tm/auth/remote-role`, `/tm/auth/remote-user`, `/tm/auth/source` | POST/PATCH | `phase1-target-rest.sh` | Phase 1 auth config |
-| `/tm/apm/...`, `/tm/ltm/...` | POST/PATCH/DELETE | `phase2-apm-dakota-rest.sh` | APM policy + LTM objects (in a transaction) |
+| `/tm/apm/...`, `/tm/ltm/...` | POST/PATCH/DELETE | `apm-build.sh` | APM policy + LTM objects (in a transaction) |
 | `/tm/net/self/~Common~<name>` | PATCH | hardening | `allow-service` lockdown |
 | `/tm/util/bash` | POST | builds, `revoke-all.sh` | tmsh / `sessiondump` where REST has no route |
 

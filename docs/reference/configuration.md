@@ -9,10 +9,10 @@ _Last validated: 2026-07._
 ## `.env` (copy from `.env.example`, gitignored)
 | Variable | Type | Default (lab) | Required | Effect |
 |---|---|---|---|---|
-| `LAB_HOST_IP` | IPv4 | `10.2.20.30` | yes | Docker host / OpenBao+LDAP+Guac address; the LDAPS cert SAN must match it |
+| `WARDEN_HOST_IP` | IPv4 | `10.2.20.30` | yes | Docker host / OpenBao+LDAP address; the LDAPS cert SAN must match it |
 | `BIGIP_MGMT` | IPv4 | `10.2.1.5` | yes | Target BIG-IP (bigipa) REST/management address |
 | `BIGIP_USER` | string | `admin` | yes | BIG-IP account for `[AGENT-IF-ACCESS]` REST calls |
-| `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — injected by the AppRole wrapper; scripts preserve an injected value across the `.env` source |
+| `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — for the demo set it here; production: inject from a secret manager (wrappers preserve an injected value across the `.env` source) |
 | `BASE_DN` | LDAP DN | `dc=warden,dc=lab` | yes | Directory base DN |
 | `LDAP_ADMIN_PW` | string | `AdminPw1!` | yes | OpenLDAP `cn=admin` password (lab only — rotate if shared) |
 | `BIND_PW` | string | `BindPw1!` | yes | `cn=bigip-bind` read-only bind password |
@@ -21,7 +21,6 @@ _Last validated: 2026-07._
 | `TEST_USER_PW` | string | `TestUser1!` | for test users | Password for the alice/bob/carol test principals (lab only) |
 | `WARDEN_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
 | `WARDEN_EPHEMERAL_ROLE` | string | `warden-admin` | no | OpenBao `ldap/creds/<role>` used in `ephemeral` mode |
-| `GUAC_ADMIN_PW` | string | `PuaGuac2026!` | for Guac | guacadmin password (rotated from the rejected default by `configure-guacamole.sh`) |
 
 ## BIG-IP sys db / httpd knobs (set by the build)
 | Setting | Value | Why |

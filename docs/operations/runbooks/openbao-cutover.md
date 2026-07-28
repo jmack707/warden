@@ -10,7 +10,7 @@ and rationale: [ADR 0005](../../adr/0005-openbao-persisted-auto-unseal.md).
 
 ## Procedure (~5 min downtime for the Warden flow)
 ```bash
-cd /root/warden
+cd <repo-root>
 # 1. recreate openbao with the persisted prod config (dev in-memory state is disposable)
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
 # 2. init + unseal; writes .env BAO_TOKEN, chowns the raft/log volumes
@@ -19,8 +19,8 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
 ./scripts/configure-openbao.sh
 ./scripts/configure-openbao-static.sh alice.admin bob.user
 ./scripts/configure-openbao-phase2.sh
-# 4. re-mint the scoped token + rebuild APM so the data-group matches (run on Nora)
-bash bigip/run-dakota-apm-build.sh
+# 4. re-mint the scoped token + rebuild APM so the data-group matches
+bash bigip/run-apm-build.sh
 ```
 
 Wire boot-time auto-unseal (AUTO custody):
@@ -46,7 +46,7 @@ still present — dev mode would have lost them. Finish with the full matrix in
 
 ## Rollback
 ```bash
-cd /root/warden
+cd <repo-root>
 docker-compose up -d openbao        # base file only → dev mode
 ./scripts/configure-openbao.sh && ./scripts/configure-openbao-static.sh alice.admin bob.user
 ```
@@ -57,4 +57,4 @@ then delete it.
 ## Escalation
 If init fails or the container crash-loops, see
 [../troubleshooting.md](../troubleshooting.md#openbao-crash-loops); escalate to the lab
-operator (jmack) before deleting the raft volume (that is irreversible).
+operator before deleting the raft volume (that is irreversible).

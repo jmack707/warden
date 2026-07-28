@@ -16,7 +16,6 @@ Compose existing, audited components instead of writing credential-handling code
   against.
 - **BIG-IP APM** is the front door: client-cert auth, credential injection, form SSO,
   portal access, and session termination.
-- **Guacamole** provides clientless SSH.
 
 The only custom artifacts are declarative: iControl-REST build scripts, an APM iRule that
 sideband-fetches from OpenBao, and LDIF/policy files. No component invents its own crypto

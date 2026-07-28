@@ -9,7 +9,7 @@
 #                   her is the expired certificate — isolates the cert-validation step)
 #
 # Apply after the memberof overlay:
-#   envsubst < ldap/test-users.ldif | ldapadd -x -H ldap://$LAB_HOST_IP -D cn=admin,$BASE_DN -w $LDAP_ADMIN_PW
+#   envsubst < ldap/test-users.ldif | ldapadd -x -H ldap://$WARDEN_HOST_IP -D cn=admin,$BASE_DN -w $LDAP_ADMIN_PW
 dn: ou=people,dc=warden,dc=lab
 objectClass: organizationalUnit
 ou: people

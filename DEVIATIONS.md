@@ -1,11 +1,14 @@
-# DEVIATIONS from RUNBOOK.md (Dakota deployment)
+# Engineering notes — reference build
 
-Per the runbook's standing instruction to record every deviation.
+Hard-won specifics and gotchas from the reference deployment (a Dakota lab). Not
+customer-facing config — the reusable knowledge is distilled into [docs/adr/](docs/adr/)
+and [docs/operations/troubleshooting.md](docs/operations/troubleshooting.md). Kept as the
+record of *why* each non-obvious choice was made.
 
 ## Environment / placement
 - **Stack host:** the OSS core runs on a **dedicated VM `warden` (VMID 240)** built
   on the Dakota Proxmox host, not the generic `10.1.1.10` lab default.
-  - `LAB_HOST_IP=10.2.20.30`, VLAN 73 (Dakota "internal", 10.2.20.0/24), gw 10.2.20.1.
+  - `WARDEN_HOST_IP=10.2.20.30`, VLAN 73 (Dakota "internal", 10.2.20.0/24), gw 10.2.20.1.
   - Debian 13 genericcloud, 4 vCPU / 8 GB / 33 GB on `nvme` lvm-thin, ovmf/EFI
     (Debian's cloud image is EFI-only), `pre-enrolled-keys=0`, cloud-init.
   - DNS pinned to `1.1.1.1` (the VLAN-73 default resolver is FreeIPA, which cannot
@@ -83,7 +86,7 @@ Per the runbook's standing instruction to record every deviation.
   returns (observed ~1-2s). Tests must POLL for deletion, not check once immediately;
   `validate-phase1.sh` (step 5) and `gate1b-verify.sh` (step 4) now poll up to 10-12s.
   Operational note: revocation ends *future* logins with a small delay, not instantly —
-  established sessions are still cut by Guacamole/APM session kill (runbook invariant 4).
+  established sessions are still cut by the APM session kill.
 
 ## (10) Portal Access target must not be a cluster address (APM reserved-address guard)
 Bookmark click died on `/vdesk/my.acl.php3?errorcode=17` with apm log
@@ -95,7 +98,7 @@ configsync+mirror+unicast address, hence rejected. No sys db override exists (sw
 for reserved/rewrite/portal/apm knobs). Fix: target bigipb's EXTERNAL self-IP 10.2.10.6
 instead — it appears nowhere in bigipa's config or device trust, and TMUI already serves
 on it with the existing `allow-service default` port lockdown (verified 200). One-line
-change: BIGIPB default in phase2-apm-dakota-rest.sh.
+change: BIGIPB default in apm-build.sh.
 
 ## (12) Shadow façade VSs replace the external-self-IP portal target (security)
 Deviation 10 pointed the bigipb bookmark at the EXTERNAL self-IP 10.2.10.6 — that works,
@@ -146,11 +149,8 @@ Verified: TMUI+SSH now closed on 10.2.10.5/.6/.7; internal portal path (10.2.20.
   the working verb is `sessiondump --delete <key>` (or `--delete all`) via util/bash.
   `sessiondump --list` enumerates keys; the script discovers a CN's key(s) by grepping
   session vars. `tmsh show apm access-session` does NOT exist on 21.1.
-- Guac cut: Guacamole 1.6 kills an active connection with **PATCH** `.../activeConnections`
-  body `[{"op":"remove","path":"/<uuid>"}]` (NOT DELETE); needs an admin token from
-  POST /api/tokens.
 - Credential cut: static-role flow rotates (`ldap/rotate-role/<CN>`); ephemeral flow revokes
-  the lease. Nora wrapper `bigip/run-revoke.sh` fetches BIGIP_PASS via AppRole and pipes it
+  the lease. Nora wrapper `scripts/revoke-all.sh` fetches BIGIP_PASS via AppRole and pipes it
   over ssh stdin. GOTCHA: revoke-all sources .env (BIGIP_PASS empty there by design) — it
   preserves an injected BIGIP_PASS across the source, same guard as the APM build.
 
@@ -164,5 +164,5 @@ BAO_DEV_* must be blanked in the override, not omitted. Seal lifecycle: init 1/1
 root token in openbao/.openbao-keys.json (0600, gitignored), .env BAO_TOKEN auto-updated.
 AUTO-unseal custody: deploy/openbao-unseal.service (systemd, enabled) unseals ~15s post-boot.
 Persistence VERIFIED (container restart preserved the static roles). Full runbook +
-rollback in OPENBAO-PROD.md. Listener stays HTTP on the internal VLAN (TLS = tracked
+rollback in docs/operations/runbooks/openbao-cutover.md. Listener stays HTTP on the internal VLAN (TLS = tracked
 follow-on — it cascades into the APM iRule sideband + scoped-token flow).

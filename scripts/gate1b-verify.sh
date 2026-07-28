@@ -41,10 +41,10 @@ cn: ${NEG}
 sn: nomember
 userPassword: NegTest1!
 EOF
-ldapadd -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -f /tmp/neg.ldif >/dev/null 2>&1
+ldapadd -x -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -f /tmp/neg.ldif >/dev/null 2>&1
 ncode=$(curl -sk -o /dev/null -w '%{http_code}' -u "$NEG:NegTest1!" "$B/mgmt/tm/sys/version")
 [ "$ncode" = 401 ] && ok "non-warden-admins denied (401)" || no "non-member got $ncode (expected 401)"
-ldapdelete -x -H "ldap://${LAB_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" "uid=${NEG},ou=users,${BASE_DN}" >/dev/null 2>&1
+ldapdelete -x -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" "uid=${NEG},ou=users,${BASE_DN}" >/dev/null 2>&1
 rm -f /tmp/neg.ldif
 
 echo "== 4. revoke ends auth (revocation is async — poll up to 12s) =="

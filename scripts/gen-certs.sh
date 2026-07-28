@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # T1.2 — generate the lab CA + LDAP server cert. SAN MUST include the address the
-# BIG-IP uses to reach the directory (LAB_HOST_IP), or LDAPS validation fails closed.
+# BIG-IP uses to reach the directory (WARDEN_HOST_IP), or LDAPS validation fails closed.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
@@ -12,7 +12,7 @@ openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
 openssl req -newkey rsa:2048 -nodes \
   -keyout ldap.key -out ldap.csr -subj "/CN=openldap.warden.lab"
 
-printf 'subjectAltName=DNS:openldap.warden.lab,DNS:openldap,IP:%s\n' "${LAB_HOST_IP}" > san.cnf
+printf 'subjectAltName=DNS:openldap.warden.lab,DNS:openldap,IP:%s\n' "${WARDEN_HOST_IP}" > san.cnf
 
 openssl x509 -req -in ldap.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -days 365 -extfile san.cnf -out ldap.crt
