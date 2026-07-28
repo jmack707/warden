@@ -47,6 +47,17 @@ deviations 1–16 ([../DEVIATIONS.md](../DEVIATIONS.md) for the why of each, dis
 | bob.user | valid | Allow → webtop | Guest (read-only) |
 | carol.expired | expired | TLS reject | — |
 
+## Credential models
+Credentials come two ways, selectable by `PUA_CRED_MODE` on the operator/issue path
+([ADR 0006](adr/0006-configurable-credential-model.md)):
+- **ephemeral** — OpenBao mints a throwaway leased account (random username, deleted at
+  TTL). Consumed by the operator over SSH (Guacamole today, webssh later).
+- **static** — OpenBao rotates a standing account's password (username = the identity CN).
+  This is the model the APM injection flow uses (the user never sees the password).
+
+Both are fronted by one abstraction (`scripts/lib/cred.sh`); a credential's revoke handle
+encodes its model, so revocation works without knowing the mode.
+
 ## Session termination (kill switch)
 `scripts/revoke-all.sh` (Nora wrapper `bigip/run-revoke.sh`) — three independent cuts
 (deviation 15): OpenBao rotate/lease-revoke (future logins), `sessiondump --delete` (live

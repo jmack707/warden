@@ -19,6 +19,8 @@ _Last validated: 2026-07._
 | `BAO_ADDR` | URL | `http://10.2.20.30:8200` | yes | OpenBao API address |
 | `BAO_TOKEN` | string | `root` (dev) / generated (prod) | yes | OpenBao token; production value is written by `openbao-init-unseal.sh` |
 | `TEST_USER_PW` | string | `TestUser1!` | for test users | Password for the alice/bob/carol test principals (lab only) |
+| `PUA_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
+| `PUA_EPHEMERAL_ROLE` | string | `pua-admin` | no | OpenBao `ldap/creds/<role>` used in `ephemeral` mode |
 | `GUAC_ADMIN_PW` | string | `PuaGuac2026!` | for Guac | guacadmin password (rotated from the rejected default by `configure-guacamole.sh`) |
 
 ## BIG-IP sys db / httpd knobs (set by the build)

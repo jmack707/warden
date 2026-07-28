@@ -3,6 +3,15 @@
 Notable changes to the pua-oss lab build. Dates are absolute. Per-change lab specifics and
 gotchas are in [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
+## 2026-07-28
+### Added
+- Configurable credential model on the operator/issue path: `PUA_CRED_MODE`
+  (`ephemeral`|`static`) behind a shared `scripts/lib/cred.sh` abstraction
+  (`cred_issue`/`cred_revoke`); `issue-cred.sh`/`revoke-cred.sh` refactored onto it. Both
+  modes verified end-to-end (issue → SSH login → revoke → denied)
+  ([ADR 0006](docs/adr/0006-configurable-credential-model.md)). The APM injection path
+  stays `static`; ephemeral-injection is a deferred step 2.
+
 ## 2026-07-27
 ### Added
 - Documentation restructured to the repository documentation standard: `docs/` tree

@@ -12,8 +12,9 @@ _Last validated: 2026-07._
 | `scripts/gen-certs.sh` | — | Generate the lab CA + LDAPS server cert (SAN must include `LAB_HOST_IP`) |
 | `scripts/gen-test-users.sh` | `<base> <mode>` | Seed the alice/bob/carol test principals + memberOf overlay |
 | `scripts/configure-openbao.sh` | — | Configure the OpenBao LDAP secrets engine + ephemeral role + audit device |
-| `scripts/issue-cred.sh` | — | Issue an ephemeral BIG-IP admin credential (STDOUT only) |
-| `scripts/revoke-cred.sh` | `<lease_id>` | Revoke a lease; deletes the ephemeral LDAP entry immediately |
+| `scripts/issue-cred.sh` | `[principal]` | Issue a credential per `PUA_CRED_MODE` (STDOUT only). `static` mode needs the principal (CN); `ephemeral` ignores it. Prints `{mode,username,password,handle,ttl}` |
+| `scripts/revoke-cred.sh` | `<handle>` | Revoke by the handle from `issue-cred.sh`: a lease id → delete the ephemeral account; a CN → rotate the static password |
+| `scripts/lib/cred.sh` | _(sourced)_ | Shared credential abstraction: `cred_issue`/`cred_revoke` over both models (ADR 0006). Not run directly |
 | `scripts/validate-phase1.sh` | — | GATE 1A — end-to-end local validation, no BIG-IP |
 
 ## Phase 2 — injection, static roles, tokens (run on the VM)
