@@ -1,3 +1,4 @@
+name: warden        # compose project name → volumes are prefixed warden_ (not the dir name)
 services:
   openbao:
     image: quay.io/openbao/openbao:latest
