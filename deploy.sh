@@ -2,7 +2,7 @@
 # Warden — one-command demo deploy. Reads .env, stands up the OSS stack, configures the
 # directory + OpenBao, and builds the APM front door on the target BIG-IP(s).
 #
-# Prereqs: docker + docker-compose, openssl/ldap-utils/jq on this host, and REST reach to
+# Prereqs: docker + the compose plugin (docker compose), openssl/ldap-utils/jq on this host, and REST reach to
 # the BIG-IP management address(es) in .env. Run from the repo root:  ./deploy.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; cd "$HERE"
@@ -25,7 +25,7 @@ echo "== 1/7 TLS material (CA + LDAPS server cert) =="
 ./scripts/gen-certs.sh
 
 echo "== 2/7 bring up OpenBao + OpenLDAP =="
-docker-compose up -d
+docker compose up -d
 sleep 5
 
 echo "== 3/7 seed the directory + bind ACL =="

@@ -46,9 +46,9 @@ Two distinct causes (`docker logs openbao`):
 - `vault.db: permission denied` — the raft/log volume is root-owned but the image runs as
   uid 100. Fix and restart:
   ```bash
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml stop openbao
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml stop openbao
   docker run --rm -v warden_openbaodata:/data -v warden_openbaologs:/logs busybox chown -R 100:1000 /data /logs
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
   ```
   `openbao-init-unseal.sh` now does this chown automatically on every run.
 

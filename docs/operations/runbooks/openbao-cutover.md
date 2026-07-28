@@ -12,7 +12,7 @@ and rationale: [ADR 0005](../../adr/0005-openbao-persisted-auto-unseal.md).
 ```bash
 cd <repo-root>
 # 1. recreate openbao with the persisted prod config (dev in-memory state is disposable)
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d openbao
 # 2. init + unseal; writes .env BAO_TOKEN, chowns the raft/log volumes
 ./scripts/openbao-init-unseal.sh
 # 3. rebuild the secrets engine / roles / policies on the fresh store
@@ -47,7 +47,7 @@ still present — dev mode would have lost them. Finish with the full matrix in
 ## Rollback
 ```bash
 cd <repo-root>
-docker-compose up -d openbao        # base file only → dev mode
+docker compose up -d openbao        # base file only → dev mode
 ./scripts/configure-openbao.sh && ./scripts/configure-openbao-static.sh alice.admin bob.user
 ```
 The raft volume is left intact for a retry. To switch AUTO → MANUAL custody:

@@ -1,6 +1,6 @@
 # Production override for OpenBao: persisted raft storage + real seal lifecycle.
 # Use ALONGSIDE the base file:
-#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # Only the openbao service changes; openldap inherits from the base compose.
 services:
   openbao:

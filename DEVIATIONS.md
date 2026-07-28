@@ -19,7 +19,9 @@ record of *why* each non-obvious choice was made.
 
 ## Docker / compose
 - Host uses Debian's **`docker.io` 26.1.5** + **`docker-compose` 2.26.1** (Compose v2,
-  invoked as `docker-compose`). Runbook text says `docker compose`; both work here.
+  invoked as `docker-compose`). Repo docs/scripts now standardize on the plugin form
+  `docker compose` (hosts with only the standalone binary can alias
+  `docker-compose` → `docker compose`); both spellings work on this host.
 - **Added a bind-mount** to the `openbao` service: `./openbao:/openbao:ro`. Reason:
   `bao` is run via `docker exec openbao bao ...` (no host `bao` CLI installed), so the
   `creation.ldif`/`deletion.ldif`/`rollback.ldif`/`pw-policy.hcl` files referenced as

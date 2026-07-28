@@ -3,11 +3,11 @@
 Stand up OpenBao + OpenLDAP on a Docker host and configure the directory and OpenBao. The
 BIG-IP front door is [deploy.md](deploy.md); `./deploy.sh` does both in one run.
 
-_Last validated: 2026-07 on Debian 13, docker.io 26.1.5 + docker-compose v2, OpenBao 2.x,
+_Last validated: 2026-07 on Debian 13, docker.io 26.1.5 + Docker Compose v2, OpenBao 2.x,
 OpenLDAP (osixia) 1.5.0._
 
 ## Prerequisites
-- A Linux host with `docker` + `docker-compose` v2, reachable by the BIG-IP on `:636`
+- A Linux host with `docker` + the Compose v2 plugin (`docker compose`), reachable by the BIG-IP on `:636`
   (LDAPS) and `:8200` (OpenBao).
 - `openssl`, `ldap-utils`, `jq`, and `gettext` (`envsubst`) on the host.
 - REST reachability from this host to the BIG-IP management address on `443`.
@@ -22,7 +22,7 @@ cp .env.example .env      # fill in the <angle-bracket> values
 ```bash
 cp .env.example .env      # edit WARDEN_HOST_IP, WARDEN_DOMAIN/BASE_DN, LDAP_ADMIN_PW, BIND_PW
 ./scripts/gen-certs.sh    # CA + LDAPS server cert; SAN is built from WARDEN_HOST_IP
-docker-compose up -d      # OpenBao + OpenLDAP
+docker compose up -d      # OpenBao + OpenLDAP
 source .env
 envsubst < ldap/seed.ldif | ldapadd -x -H "ldap://${WARDEN_HOST_IP}" \
   -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}"                 # seed the directory

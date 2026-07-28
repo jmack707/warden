@@ -37,7 +37,7 @@ path still resolves. Until then, the internal VLAN is the control.
 ## Teardown
 ```bash
 cd /root/warden
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml down   # stop stack
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down   # stop stack
 # to also drop persisted state (IRREVERSIBLE): add -v to remove the raft/ldap volumes
 ```
 On the BIG-IP, revoke any live sessions first with
