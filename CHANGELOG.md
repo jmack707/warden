@@ -3,6 +3,15 @@
 Notable changes to Warden. Dates are absolute. Engineering notes are in
 [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
+## 2026-07-29
+### Fixed
+- The APM OpenBao-fetch iRule hardcoded one site's OpenBao address (`10.2.20.30`), so any
+  deploy to a different host silently sent the credential rotate/fetch to the wrong OpenBao
+  (symptom: websso `Could not find SSO password`, empty local audit log). The iRules now
+  carry a `${WARDEN_HOST_IP}` placeholder and `apm-build.sh` renders it from `.env` at
+  upload time (`envsubst` restricted to that one variable so the iRule's own `$vars`
+  survive).
+
 ## 2026-07-28
 ### Changed
 - **Productized as a self-contained customer demo** under the name **Warden**. `.env` is now

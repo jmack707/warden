@@ -5,20 +5,20 @@ when ACCESS_POLICY_AGENT_EVENT {
         if { $cn eq "" } { return }
         if { $tok eq "" } { return }
 
-        set c [connect -timeout 3000 -idle 5 10.2.20.30:8200]
+        set c [connect -timeout 3000 -idle 5 ${WARDEN_HOST_IP}:8200]
         if { $c ne "" } {
-            set r "POST /v1/ldap/rotate-role/$cn HTTP/1.1\r\nHost: 10.2.20.30\r\nX-Vault-Token: $tok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            set r "POST /v1/ldap/rotate-role/$cn HTTP/1.1\r\nHost: ${WARDEN_HOST_IP}\r\nX-Vault-Token: $tok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             send -timeout 3000 $c $r
             recv -timeout 3000 $c
             close $c
         }
 
-        set c2 [connect -timeout 3000 -idle 5 10.2.20.30:8200]
+        set c2 [connect -timeout 3000 -idle 5 ${WARDEN_HOST_IP}:8200]
         if { $c2 eq "" } {
             ACCESS::session data set session.custom.warden.fetch_err "connect-failed"
             return
         }
-        set g "GET /v1/ldap/static-cred/$cn HTTP/1.1\r\nHost: 10.2.20.30\r\nX-Vault-Token: $tok\r\nConnection: close\r\n\r\n"
+        set g "GET /v1/ldap/static-cred/$cn HTTP/1.1\r\nHost: ${WARDEN_HOST_IP}\r\nX-Vault-Token: $tok\r\nConnection: close\r\n\r\n"
         send -timeout 3000 $c2 $g
         set resp ""
         for { set i 0 } { $i < 16 } { incr i } {

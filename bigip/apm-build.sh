@@ -26,7 +26,7 @@ P=warden-apm                      # object-name prefix / access-profile name
 PART=Common
 CA=warden-ca.crt              # installed in Phase 1
 AAA=warden-openldap-aaa
-LDAP_HOST="${WARDEN_HOST_IP}"     # 10.2.20.30 (OpenLDAP)
+LDAP_HOST="${WARDEN_HOST_IP}"     # OpenLDAP + OpenBao host (the warden VM)
 PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
@@ -120,8 +120,9 @@ for grp in logout:logout eps:eps errormap:errormap framework_installation:framew
 done
 
 step "4b. OpenBao fetch (iRule + token datagroup) + fetch/SSO-creds agents (Stage B1)"
-# iRule that rotates+reads the CN's OpenBao static-cred and stashes the password
-add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-openbao-fetch" --rawfile b "$IRULE_FILE" '{name:$n,partition:"Common",apiAnonymous:$b}')"
+# iRule that rotates+reads the CN's OpenBao static-cred and stashes the password.
+# Rendered with envsubst restricted to ${WARDEN_HOST_IP} so the iRule's own $vars survive.
+add "$B/mgmt/tm/ltm/rule" "$(jq -n --arg n "${P}-openbao-fetch" --arg b "$(envsubst '${WARDEN_HOST_IP}' < "$IRULE_FILE")" '{name:$n,partition:"Common",apiAnonymous:$b}')"
 # scoped token datagroup for the iRule
 add "$B/mgmt/tm/ltm/data-group/internal" "$(jq -n --arg t "$APM_TOKEN" '{name:"warden_openbao_dg",partition:"Common",type:"string",records:[{name:"token",data:$t}]}')"
 # iRule Event agent (id must match the iRule's agent_id check)

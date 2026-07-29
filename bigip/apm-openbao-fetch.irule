@@ -11,7 +11,7 @@
 #-----------------------------------------------------------------------------
 when ACCESS_POLICY_AGENT_EVENT {
     if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
-        set bao_host "10.2.20.30"
+        set bao_host "${WARDEN_HOST_IP}"
         set bao_port 8200
         # scoped token seeded from an encrypted APM system variable at policy start:
         set bao_tok [ACCESS::session data get session.custom.warden.baotoken]
