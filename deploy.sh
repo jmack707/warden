@@ -7,6 +7,18 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; cd "$HERE"
 
+# preflight: fail before touching anything if a prereq binary is missing
+missing=""
+for c in openssl ldapadd ldapmodify jq envsubst docker; do
+  command -v "$c" >/dev/null || missing="$missing $c"
+done
+{ command -v docker >/dev/null && docker compose version >/dev/null 2>&1; } || missing="$missing docker-compose-plugin"
+[ -z "$missing" ] || {
+  echo "missing prereqs:$missing" >&2
+  echo "on Debian/Ubuntu: sudo apt-get install -y ldap-utils jq gettext-base openssl  (docker + compose plugin per docs/install.md)" >&2
+  exit 1
+}
+
 [ -f .env ] || { echo "no .env — copy .env.example to .env and fill in the <angle-bracket> values" >&2; exit 1; }
 set -a; . ./.env; set +a
 
