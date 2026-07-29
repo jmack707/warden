@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Import the Warden test client certs (alice/bob/carol) into the local browser cert
-# stores so you can present them to the APM front door at https://10.2.20.50.
-# Run on your workstation (vegas), NOT as root. Needs libnss3-tools (pk12util/certutil):
+# stores so you can present them to the APM front door at https://<WARDEN_APM_VIP>/.
+# Run on your operator workstation, NOT as root. Needs libnss3-tools (pk12util/certutil):
 #   Debian/Ubuntu:  sudo apt-get install -y libnss3-tools
 #
 # What it does: pulls the .p12 bundles + CA from the warden VM, then imports each into
-# every Firefox profile and the Chrome/Chromium NSS DB it finds.
+# every Firefox profile and the Chrome/Chromium NSS DB it finds. Point it at your site:
+#   WARDEN_VM=debian@<warden-vm-ip> WARDEN_REMOTE_DIR=/opt/warden scripts/import-browser-certs.sh
 set -euo pipefail
 
-VM="${WARDEN_VM:-root@10.2.20.30}"                 # warden VM (override with WARDEN_VM=...)
-REMOTE_DIR="/root/warden"
+VM="${WARDEN_VM:?set WARDEN_VM (e.g. debian@<warden-vm-ip>)}"
+REMOTE_DIR="${WARDEN_REMOTE_DIR:-/opt/warden}"     # repo path on the warden VM
 P12_PASS="${WARDEN_P12_PASS:-warden}"
 USERS=(alice.admin bob.user carol.expired)
 WORK="${HOME}/.warden-certs"
@@ -46,7 +47,7 @@ for db in "${dbs[@]}"; do
 done
 
 echo
-echo "Done. In the browser, go to https://10.2.20.50 and pick a cert when prompted:"
+echo "Done. In the browser, go to https://${WARDEN_APM_VIP:-<your-APM-VIP>}/ and pick a cert when prompted:"
 echo "  Warden alice.admin   -> reaches the webtop (in bigip-admins)"
 echo "  Warden bob.user      -> Access Denied (not in bigip-admins)"
 echo "  Warden carol.expired -> TLS/cert error (expired) — browser may not even offer it"

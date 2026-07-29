@@ -11,6 +11,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
 : "${TEST_USER_PW:?set TEST_USER_PW in .env}"
 CERTS="${HERE}/../certs"; CLIENTS="${HERE}/../clients"; mkdir -p "$CLIENTS"
+# signing below writes $CERTS/ca.srl — reclaim the dir if the openldap container owns it
+# (on a FIRST deploy the stack comes up between gen-certs.sh and this script, so the
+# chown race hits here, not there)
+# shellcheck disable=SC1091
+. "${HERE}/lib/certs.sh"
+ensure_certs_writable "$CERTS"
 
 echo "== 1. enable memberof/refint overlay (ignore 'already exists') =="
 docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// -c \

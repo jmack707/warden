@@ -30,7 +30,7 @@ LDAP_HOST="${WARDEN_HOST_IP}"     # OpenLDAP + OpenBao host (the warden VM)
 PEOPLE="ou=people,${BASE_DN}"
 BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
 GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
-VIP_IP="${WARDEN_APM_VIP:-10.2.20.50}"
+VIP_IP="${WARDEN_APM_VIP:?set WARDEN_APM_VIP in .env}"
 # Shadow façades (RFC5737 TEST-NET-1) — APM portal access refuses "reserved" targets
 # (self-IPs, mgmt, device-trust/cluster addrs -> 01490585/errorcode=17, deviation 10),
 # and exposing TMUI on a routable external self-IP is a security hole (deviation 12).

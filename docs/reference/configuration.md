@@ -7,16 +7,16 @@ sets on the BIG-IP, and the key BIG-IP object names. Site-specific values use th
 _Last validated: 2026-07._
 
 ## `.env` (copy from `.env.example`, gitignored)
-| Variable | Type | Default (lab) | Required | Effect |
+| Variable | Type | Example | Required | Effect |
 |---|---|---|---|---|
-| `WARDEN_HOST_IP` | IPv4 | `10.2.20.30` | yes | Docker host / OpenBao+LDAP address; the LDAPS cert SAN must match it |
-| `BIGIP_MGMT` | IPv4 | `10.2.1.5` | yes | Target BIG-IP (bigipa) REST/management address |
+| `WARDEN_HOST_IP` | IPv4 | `<this-host-ip>` | yes | Docker host / OpenBao+LDAP address; the LDAPS cert SAN must match it |
+| `BIGIP_MGMT` | IPv4 | `<bigip-a-mgmt-ip>` | yes | Target BIG-IP (bigipa) REST/management address |
 | `BIGIP_USER` | string | `admin` | yes | BIG-IP account for `[AGENT-IF-ACCESS]` REST calls |
 | `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — for the demo set it here; production: inject from a secret manager (wrappers preserve an injected value across the `.env` source) |
 | `BASE_DN` | LDAP DN | `dc=warden,dc=lab` | yes | Directory base DN |
 | `LDAP_ADMIN_PW` | string | `AdminPw1!` | yes | OpenLDAP `cn=admin` password (lab only — rotate if shared) |
 | `BIND_PW` | string | `BindPw1!` | yes | `cn=bigip-bind` read-only bind password |
-| `BAO_ADDR` | URL | `http://10.2.20.30:8200` | yes | OpenBao API address |
+| `BAO_ADDR` | URL | `http://<this-host-ip>:8200` | yes | OpenBao API address |
 | `BAO_TOKEN` | string | `root` (dev) / generated (prod) | yes | OpenBao token; production value is written by `openbao-init-unseal.sh` |
 | `TEST_USER_PW` | string | `TestUser1!` | for test users | Password for the alice/bob/carol test principals (lab only) |
 | `WARDEN_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
@@ -35,7 +35,7 @@ _Last validated: 2026-07._
 | Object | Name |
 |---|---|
 | Access profile | `warden-apm` |
-| Test VIP | `10.2.20.50:443` (`warden-apm-test-vs`) |
+| Test VIP | `<WARDEN_APM_VIP>:443` (`warden-apm-test-vs`) |
 | AAA LDAP + pool | `warden-openldap-aaa`, `warden-openldap-aaa-pool` |
 | Shadow façades | `warden-apm-shadow-a-vs` (192.0.2.5), `warden-apm-shadow-b-vs` (192.0.2.6) |
 | Portal Access | `warden-apm-bigipa-tmui`, `warden-apm-bigipb-tmui` |
