@@ -6,6 +6,19 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
 cd "${HERE}/../certs"
 
+# osixia/openldap chowns this bind-mounted dir at startup, so any re-run after the stack
+# has been up finds certs/ root-owned. Reclaim it, or fail early with the fix.
+if [ ! -w . ] || { [ -e ca.key ] && [ ! -w ca.key ]; }; then
+  if command -v sudo >/dev/null 2>&1; then
+    echo "==> certs/ not writable (openldap container chowned it) — reclaiming with sudo"
+    sudo chown -R "$(id -u):$(id -g)" .
+  else
+    echo "certs/ is not writable (the openldap container chowns it at startup)." >&2
+    echo "Fix as root: chown -R $(id -un) $(pwd)  — then re-run." >&2
+    exit 1
+  fi
+fi
+
 openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
   -keyout ca.key -out ca.crt -subj "/CN=Warden Lab CA"
 
