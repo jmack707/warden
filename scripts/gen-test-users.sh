@@ -4,12 +4,13 @@
 #   - ou=people / ou=groups, three users, cn=bigip-admins group
 #   - Warden-Lab-CA-signed client certs (CN=uid): alice.admin + bob.user valid,
 #     carol.expired genuinely expired (notAfter in the past)
-# Private keys land in certs/clients/ (gitignored); .crt are public.
+# Private keys land in clients/ (gitignored); .crt are public. Kept OUTSIDE certs/ —
+# that dir is bind-mounted into openldap, which chowns it on every container start.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
 : "${TEST_USER_PW:?set TEST_USER_PW in .env}"
-CERTS="${HERE}/../certs"; CLIENTS="${CERTS}/clients"; mkdir -p "$CLIENTS"
+CERTS="${HERE}/../certs"; CLIENTS="${HERE}/../clients"; mkdir -p "$CLIENTS"
 
 echo "== 1. enable memberof/refint overlay (ignore 'already exists') =="
 docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// -c \

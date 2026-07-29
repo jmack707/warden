@@ -9,7 +9,7 @@
 set -euo pipefail
 
 VM="${WARDEN_VM:-root@10.2.20.30}"                 # warden VM (override with WARDEN_VM=...)
-REMOTE_DIR="/root/warden/certs"
+REMOTE_DIR="/root/warden"
 P12_PASS="${WARDEN_P12_PASS:-warden}"
 USERS=(alice.admin bob.user carol.expired)
 WORK="${HOME}/.warden-certs"
@@ -19,7 +19,7 @@ command -v pk12util >/dev/null || { echo "pk12util not found -> sudo apt-get ins
 echo "==> fetching bundles from ${VM}"
 mkdir -p "$WORK"
 for u in "${USERS[@]}"; do scp -q "${VM}:${REMOTE_DIR}/clients/${u}.p12" "$WORK/"; done
-scp -q "${VM}:${REMOTE_DIR}/ca.crt" "$WORK/warden-ca.crt"
+scp -q "${VM}:${REMOTE_DIR}/certs/ca.crt" "$WORK/warden-ca.crt"
 
 # collect NSS databases: Chrome/Chromium + every Firefox profile (incl. snap/flatpak)
 dbs=()

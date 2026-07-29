@@ -6,6 +6,10 @@ certs/**/*.srl
 certs/**/*.ext
 certs/**/*.p12
 certs/san.cnf
+clients/*.key
+clients/*.csr
+clients/*.ext
+clients/*.p12
 *.log
 initdb.sql
 openbao/.openbao-keys.json

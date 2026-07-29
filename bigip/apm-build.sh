@@ -241,4 +241,4 @@ add "$B/mgmt/tm/ltm/virtual" "$(jq -n --arg n "${P}-test-vs" --arg d "/$PART/${V
     rules:[$ir,$rs],
     sourceAddressTranslation:{type:"automap"}}')"
 
-echo; echo "Done. Test:  curl -k --cert certs/clients/<uid>.crt --key certs/clients/<uid>.key https://${VIP_IP}/  ; then read /var/log/apm"
+echo; echo "Done. Test:  curl -k --cert clients/<uid>.crt --key clients/<uid>.key https://${VIP_IP}/  ; then read /var/log/apm"

@@ -3,7 +3,7 @@
 The rules below exist because breaking them has bitten us.
 
 ## Secrets
-- Never commit `.env`, private keys (`certs/*.key`, `certs/clients/*`), issued passwords, or
+- Never commit `.env`, private keys (`certs/*.key`, `clients/*.key`/`.p12`), issued passwords, or
   `openbao/.openbao-keys.json`. All are gitignored — keep them that way.
 - For the demo, `BIGIP_PASS` sits in `.env`. In production, leave it empty and inject it
   from your secret manager at runtime — the wrappers preserve an injected value across the

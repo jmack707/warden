@@ -41,7 +41,7 @@ no HA peer set, only the local unit's façade/bookmark is built.
 
 ## Verification
 ```bash
-cd certs/clients
+cd clients
 for u in alice.admin bob.user carol.expired; do
   curl -sk --cert $u.crt --key $u.key -o /dev/null -w "$u %{http_code}\n" -L "https://${WARDEN_APM_VIP}/"
 done
