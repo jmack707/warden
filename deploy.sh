@@ -37,7 +37,11 @@ echo "== 1/7 TLS material (CA + LDAPS server cert) =="
 ./scripts/gen-certs.sh
 
 echo "== 2/7 bring up OpenBao + OpenLDAP =="
+# slapd only reads TLS certs at startup; step 1 regenerated them, so an already-running
+# openldap would keep serving the old cert (LDAPS validation then fails everywhere)
+LDAP_WAS_RUNNING="$(docker ps -q -f name='^openldap$')"
 docker compose up -d
+[ -z "$LDAP_WAS_RUNNING" ] || docker compose restart openldap
 sleep 5
 
 echo "== 3/7 seed the directory + bind ACL =="
