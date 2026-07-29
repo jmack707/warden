@@ -25,13 +25,16 @@ req() { # req METHOD URL JSON
   local m="$1" url="$2" body="${3:-}"
   local out code
   if [ -n "$body" ]; then
-    out="$(curl "${AUTH[@]}" -w '\n%{http_code}' -X "$m" -H 'Content-Type: application/json' -d "$body" "$url")"
+    out="$(curl "${AUTH[@]}" -w '\n%{http_code}' -X "$m" -H 'Content-Type: application/json' -d "$body" "$url")" \
+      || { echo "no HTTP response from ${url#$B} — is ${BIGIP_MGMT}:443 reachable from this host?" >&2; exit 1; }
   else
-    out="$(curl "${AUTH[@]}" -w '\n%{http_code}' -X "$m" "$url")"
+    out="$(curl "${AUTH[@]}" -w '\n%{http_code}' -X "$m" "$url")" \
+      || { echo "no HTTP response from ${url#$B} — is ${BIGIP_MGMT}:443 reachable from this host?" >&2; exit 1; }
   fi
   code="$(tail -n1 <<<"$out")"; body="$(sed '$d' <<<"$out")"
-  echo "  HTTP $code  ${url#$B}"
-  [ "$code" -lt 400 ] || { echo "$body" | jq . 2>/dev/null || echo "$body"; echo "REST call failed" >&2; exit 1; }
+  # status + errors go to stderr so they stay visible when a caller captures stdout
+  echo "  HTTP $code  ${url#$B}" >&2
+  [ "$code" -lt 400 ] || { { echo "$body" | jq . 2>/dev/null || echo "$body"; echo "REST call failed (HTTP $code, user ${BIGIP_USER})"; } >&2; exit 1; }
   echo "$body"
 }
 
