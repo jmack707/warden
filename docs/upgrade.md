@@ -17,8 +17,8 @@ tears down the mutable graph first). To back out entirely, delete the test VS an
 profile:
 ```bash
 # via iControl REST as admin:
-curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/ltm/virtual/~Common~warden-apm-test-vs
-curl -sk -u admin:<pw> -X DELETE https://10.2.1.5/mgmt/tm/apm/profile/access/~Common~warden-apm
+curl -sk -u admin:<pw> -X DELETE https://<BIGIP_MGMT>/mgmt/tm/ltm/virtual/~Common~warden-apm-test-vs
+curl -sk -u admin:<pw> -X DELETE https://<BIGIP_MGMT>/mgmt/tm/apm/profile/access/~Common~warden-apm
 ```
 
 ## OpenBao dev → production cutover

@@ -33,5 +33,5 @@ There is **no** clean REST route for deleting an APM session on 21.1 — use
 ## Data-plane (APM front door)
 | Endpoint | Purpose |
 |---|---|
-| `https://10.2.20.50/` (test VIP) | client-cert auth → APM policy → webtop |
+| `https://<WARDEN_APM_VIP>/` (test VIP) | client-cert auth → APM policy → webtop |
 | `https://192.0.2.5/`, `https://192.0.2.6/` (façades) | shadow VS targets for Portal Access (ADR 0003); not directly browsed |

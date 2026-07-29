@@ -4,7 +4,19 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
 ## 2026-07-29
+### Added
+- `scripts/renew-apm-token.sh` + cron guidance in [docs/deploy.md](docs/deploy.md): the
+  APM fetch token is periodic (768h) and previously expired silently after 32 days,
+  breaking SSO injection with no visible error until login.
+
 ### Fixed
+- First-run `deploy.sh` failed at step 5: the openldap container chowns `certs/` when the
+  stack comes up (between `gen-certs.sh` and the client-cert signing). The reclaim logic
+  moved to `scripts/lib/certs.sh` and now runs before signing in `gen-test-users.sh` too.
+- Removed the remaining hardcoded site-specific values: `apm-build.sh` no longer falls
+  back to a hardcoded VIP (`WARDEN_APM_VIP` is required), `import-browser-certs.sh` takes
+  `WARDEN_VM` (required) + `WARDEN_REMOTE_DIR` (default `/opt/warden`), and the reference
+  docs/runbooks use `<WARDEN_APM_VIP>`-style placeholders instead of one lab's addresses.
 - The APM OpenBao-fetch iRule hardcoded one site's OpenBao address (`10.2.20.30`), so any
   deploy to a different host silently sent the credential rotate/fetch to the wrong OpenBao
   (symptom: websso `Could not find SSO password`, empty local audit log). The iRules now

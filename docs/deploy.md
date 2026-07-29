@@ -55,3 +55,15 @@ grep pam_bigip_authz /var/log/secure | tail -2   # on the BIG-IP
 Expected: `alice.admin ... role 0 (Administrator)`, `bob.user ... level=Guest`. The final
 browser click-through is
 [operations/runbooks/browser-verify.md](operations/runbooks/browser-verify.md).
+
+## Keep the APM token alive
+The scoped token the fetch iRule uses is periodic (`period=768h`) and dies if not renewed
+within its period — the failure is silent (webtop loads, SSO injects an empty password).
+Install a daily renewal on the warden host:
+```bash
+echo '0 4 * * * root /opt/warden/scripts/renew-apm-token.sh >> /var/log/warden-renew.log 2>&1' \
+  | sudo tee /etc/cron.d/warden-renew-apm-token
+```
+`scripts/renew-apm-token.sh` reads the live token from the `warden_openbao_dg` datagroup
+on `BIGIP_MGMT` and renews it against `BAO_ADDR`; it exits non-zero (and logs why) if
+either step fails.
