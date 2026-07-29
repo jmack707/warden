@@ -37,11 +37,11 @@ echo "== 1/7 TLS material (CA + LDAPS server cert) =="
 ./scripts/gen-certs.sh
 
 echo "== 2/7 bring up OpenBao + OpenLDAP =="
-# slapd only reads TLS certs at startup; step 1 regenerated them, so an already-running
-# openldap would keep serving the old cert (LDAPS validation then fails everywhere)
-LDAP_WAS_RUNNING="$(docker ps -q -f name='^openldap$')"
+# note whether openldap predates the certs we just regenerated: slapd only reads TLS
+# material at startup, so it must be restarted before the BIG-IP steps — but NOT here:
+# the container chowns certs/ on start, and steps 3-5 still sign with certs/ca.key
+LDAP_NEEDS_RESTART="$(docker ps -q -f name='^openldap$')"
 docker compose up -d
-[ -z "$LDAP_WAS_RUNNING" ] || docker compose restart openldap
 sleep 5
 
 echo "== 3/7 seed the directory + bind ACL =="
@@ -60,6 +60,14 @@ for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
 done
 ./scripts/configure-openbao-static.sh alice.admin bob.user
 ./scripts/configure-openbao-phase2.sh   # scoped token policy for the APM fetch
+
+# all local cert signing is done — now slapd can pick up the regenerated TLS material
+# (the restart chowns certs/ to the container user; gen-certs.sh reclaims it next run)
+if [ -n "$LDAP_NEEDS_RESTART" ]; then
+  echo "== restart openldap to load the regenerated certs =="
+  docker compose restart openldap
+  sleep 5
+fi
 
 echo "== 6/7 BIG-IP auth (LDAPS system-auth + remote-role) =="
 BIGIP_PASS="$BIGIP_PASS" ./bigip/phase1-target-rest.sh

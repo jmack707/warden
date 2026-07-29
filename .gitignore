@@ -10,6 +10,10 @@ clients/*.key
 clients/*.csr
 clients/*.ext
 clients/*.p12
+# regenerated on every deploy — tracking them makes 'git pull' conflict on deploy hosts
+clients/*.crt
+certs/ca.crt
+certs/ldap.crt
 *.log
 initdb.sql
 openbao/.openbao-keys.json
