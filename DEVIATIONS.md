@@ -1,19 +1,20 @@
 # Engineering notes — reference build
 
-Hard-won specifics and gotchas from the reference deployment (a Dakota lab). Not
+Hard-won specifics and gotchas from the private reference deployment this was first
+built on. Not
 customer-facing config — the reusable knowledge is distilled into [docs/adr/](docs/adr/)
 and [docs/operations/troubleshooting.md](docs/operations/troubleshooting.md). Kept as the
 record of *why* each non-obvious choice was made.
 
 ## Environment / placement
-- **Stack host:** the OSS core runs on a **dedicated VM `warden` (VMID 240)** built
-  on the Dakota Proxmox host, not the generic `10.1.1.10` lab default.
-  - `WARDEN_HOST_IP=10.2.20.30`, VLAN 73 (Dakota "internal", 10.2.20.0/24), gw 10.2.20.1.
+- **Stack host:** the OSS core ran on a **dedicated VM** built on the reference site's
+  Proxmox host, not the generic `10.1.1.10` lab default.
+  - `WARDEN_HOST_IP=10.2.20.30`, VLAN 73 (that site's "internal" arm, 10.2.20.0/24), gw 10.2.20.1.
   - Debian 13 genericcloud, 4 vCPU / 8 GB / 33 GB on `nvme` lvm-thin, ovmf/EFI
     (Debian's cloud image is EFI-only), `pre-enrolled-keys=0`, cloud-init.
   - DNS pinned to `1.1.1.1` (the VLAN-73 default resolver is FreeIPA, which cannot
-    resolve public registries — known Dakota gotcha).
-- **Target BIG-IP:** `bigipa.dakota`, mgmt `10.2.1.5` (TMOS 21.1.0). Its HA peer
+    resolve public registries — a gotcha specific to that site).
+- **Target BIG-IP:** `bigipa`, mgmt `10.2.1.5` (TMOS 21.1.0). Its HA peer
   `bigipb` (211) was left powered off; Phase 1 needs only the single target box, and
   TMOS auth-source is a device-local setting (not config-synced).
 
@@ -82,7 +83,7 @@ record of *why* each non-obvious choice was made.
   `kv/bigip/common` via the sanctioned `f5-onboard` AppRole (`bootstrap/f5-bigip/bin/bao.sh`),
   never stored in this repo.
 - **T1.7 auth-source flip gated by the harness auto-mode guard:** all additive objects
-  (cert, `auth ldap`, `remote-user`, `remote-role`) applied via REST from Nora, but
+  (cert, `auth ldap`, `remote-user`, `remote-role`) applied via REST from the build host, but
   `PATCH /mgmt/tm/auth/source {type:ldap}` was classifier-blocked as a live auth
   mutation. Per operator decision the flip is run by hand on bigipa
   (`modify auth source { type ldap } ; save sys config`). admin/root stay local, so
@@ -109,7 +110,7 @@ change: BIGIPB default in apm-build.sh.
 ## (12) Shadow façade VSs replace the external-self-IP portal target (security)
 Deviation 10 pointed the bigipb bookmark at the EXTERNAL self-IP 10.2.10.6 — that works,
 but it depends on TMUI being reachable on the external VLAN, which is exposure we do not
-want. Reworked to the shadow-VS pattern proven on the Nora build (bigip-apm-cert-ldap
+want. Reworked to the shadow-VS pattern proven on an earlier build (bigip-apm-cert-ldap
 role, K31750304): portal resources target RFC5737 TEST-NET façades that are NOT in APM's
 reserved set — 192.0.2.5 ("bigipa TMUI", NEW bookmark) and 192.0.2.6 ("bigipb TMUI") —
 and plain LTM shadow VSs on those IPs (TCP-only, TLS passthrough, all VLANs, snat automap)
@@ -156,7 +157,7 @@ Verified: TMUI+SSH now closed on 10.2.10.5/.6/.7; internal portal path (10.2.20.
   `sessiondump --list` enumerates keys; the script discovers a CN's key(s) by grepping
   session vars. `tmsh show apm access-session` does NOT exist on 21.1.
 - Credential cut: static-role flow rotates (`ldap/rotate-role/<CN>`); ephemeral flow revokes
-  the lease. Nora wrapper `scripts/revoke-all.sh` fetches BIGIP_PASS via AppRole and pipes it
+  the lease. A calling wrapper around `scripts/revoke-all.sh` can fetch BIGIP_PASS via AppRole and pipe it
   over ssh stdin. GOTCHA: revoke-all sources .env (BIGIP_PASS empty there by design) — it
   preserves an injected BIGIP_PASS across the source, same guard as the APM build.
 
