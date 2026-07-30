@@ -18,10 +18,14 @@ record of *why* each non-obvious choice was made.
   TMOS auth-source is a device-local setting (not config-synced).
 
 ## Docker / compose
-- Host uses Debian's **`docker.io` 26.1.5** + **`docker-compose` 2.26.1** (Compose v2,
-  invoked as `docker-compose`). Repo docs/scripts now standardize on the plugin form
-  `docker compose` (hosts with only the standalone binary can alias
-  `docker-compose` → `docker compose`); both spellings work on this host.
+- **Compose is invoked as `docker compose` (v2 plugin form) everywhere** — scripts, docs and
+  runbooks. That is the single supported spelling; the standalone v1 `docker-compose` binary
+  is end-of-life and is not used. `deploy.sh` checks `docker compose version` in its preflight
+  and fails with the install hint if it is absent. Only the *filenames* keep the hyphen
+  (`docker-compose.yml`, `docker-compose.prod.yml`) — that is Compose's own convention.
+  On Debian install `docker-compose-v2` (Debian 13 ships Compose 2.26.1 as the plugin). If a
+  host has only the standalone binary, alias it (`docker-compose` → `docker compose`) rather
+  than editing the scripts.
 - **Added a bind-mount** to the `openbao` service: `./openbao:/openbao:ro`. Reason:
   `bao` is run via `docker exec openbao bao ...` (no host `bao` CLI installed), so the
   `creation.ldif`/`deletion.ldif`/`rollback.ldif`/`pw-policy.hcl` files referenced as
