@@ -1,12 +1,12 @@
-dn: ou=users,dc=warden,dc=lab
+dn: ${WARDEN_PRIV_SEARCH_BASE}
 objectClass: organizationalUnit
 ou: users
 
-dn: ou=svc,dc=warden,dc=lab
+dn: ou=svc,${BASE_DN}
 objectClass: organizationalUnit
 ou: svc
 
-dn: cn=bigip-bind,ou=svc,dc=warden,dc=lab
+dn: ${WARDEN_BIND_DN}
 objectClass: inetOrgPerson
 cn: bigip-bind
 sn: service

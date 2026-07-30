@@ -17,15 +17,17 @@ CERTS="${HERE}/../certs"; CLIENTS="${HERE}/../clients"; mkdir -p "$CLIENTS"
 # shellcheck disable=SC1091
 . "${HERE}/lib/certs.sh"
 ensure_certs_writable "$CERTS"
+# shellcheck disable=SC1091
+. "${HERE}/lib/directory.sh"
+# shellcheck disable=SC1091
+. "${HERE}/lib/ldif.sh"
 
 echo "== 1. enable memberof/refint overlay (ignore 'already exists') =="
 docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// -c \
   < "${HERE}/../ldap/memberof-overlay.ldif" 2>&1 | grep -viE "^SASL|adding|modifying" || true
 
 echo "== 2. add ou=people/ou=groups, users, bigip-admins group =="
-envsubst < "${HERE}/../ldap/test-users.ldif" \
-  | ldapadd -x -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -c 2>&1 \
-  | grep -viE "^adding" || true
+ldif_apply "test-users" "${HERE}/../ldap/test-users.ldif"
 
 echo "== 3. issue client certs (CN=uid), signed by the Warden Lab CA =="
 # shellcheck disable=SC1091
