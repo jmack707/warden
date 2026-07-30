@@ -99,21 +99,9 @@ decides on the attribute.
   BIG-IP validates the chain and fails closed if it cannot.
 
 ### 2. Fill in `.env`
-```bash
-WARDEN_DIRECTORY_MODE=external
-WARDEN_LDAP_HOST=dc01.example.com
-WARDEN_LDAP_SCHEMA=ad                  # or openldap (FreeIPA, 389DS, OpenLDAP)
-WARDEN_LDAP_CA_FILE=/etc/ssl/certs/example-root-ca.pem
-BASE_DN=dc=example,dc=com
-WARDEN_BIND_DN=cn=svc-bigip-bind,ou=Service,dc=example,dc=com
-BIND_PW=...
-WARDEN_USER_SEARCH_BASE=ou=Users,dc=example,dc=com
-WARDEN_PRIV_SEARCH_BASE=ou=PAM,dc=example,dc=com
-WARDEN_DIR_ADMIN_DN=cn=svc-warden-rotate,ou=Service,dc=example,dc=com
-WARDEN_DIR_ADMIN_PW=...
-WARDEN_ADMIN_GROUP_DN=cn=BigipAdmins,ou=Groups,dc=example,dc=com
-WARDEN_PRINCIPALS="alice.admin bob.user"     # who gets a client cert + a static role
-```
+Copy the block for your directory from [Worked examples](#worked-examples) below and adjust
+the DNs. Every value is documented in
+[reference/configuration.md](reference/configuration.md).
 
 ### 3. Pre-flight, then deploy
 ```bash
@@ -130,24 +118,98 @@ continues (the data is Warden's own); in external mode it is fatal and stops bef
 BIG-IP is touched. Either way it probes as the BIG-IP's read-only bind, which also catches a
 directory ACL that hides the attribute from that account.
 
-## Active Directory specifics
-- `WARDEN_LDAP_SCHEMA=ad` switches OpenBao to reset `unicodePwd` and defaults
-  `WARDEN_LOGIN_ATTR=sAMAccountName`.
-- AD DNs are `CN=<display name>,OU=...` while login is `sAMAccountName`. Warden builds
-  privileged-account DNs as `<WARDEN_PRIV_DN_ATTR>=<CN>,<WARDEN_PRIV_SEARCH_BASE>`, with
-  `WARDEN_PRIV_DN_ATTR=cn` under the `ad` schema — so the names you pass in
-  `WARDEN_PRINCIPALS` must match the DN's `CN` component. Where they differ, create the PAM
-  accounts with `CN` equal to `sAMAccountName` (simplest), or pass explicit DNs to
-  `scripts/configure-openbao-static.sh`.
-- Password resets over LDAP require LDAPS on the DC — plain 389 will refuse.
-- `memberOf` on AD is computed and searchable, so the default group mapping works as-is.
-  Nested groups are NOT expanded by the BIG-IP remote-role: make operators direct members.
+## Worked examples
+Complete, verified against the resolver — each block produces the behaviour described under
+it. Only directory settings are shown; `BIGIP_*`, `WARDEN_APM_VIP` and the OpenBao values are
+the same as in [.env.example](../.env.example).
 
-## FreeIPA / 389DS
-Use `WARDEN_LDAP_SCHEMA=openldap` with `WARDEN_LOGIN_ATTR=uid`. FreeIPA computes `memberOf`,
-so the default mapping works. Its default subtrees are
-`cn=users,cn=accounts,<BASE_DN>` and `cn=groups,cn=accounts,<BASE_DN>` — set
-`WARDEN_USER_SEARCH_BASE` and `WARDEN_ADMIN_GROUP_DN` accordingly.
+### Active Directory
+The straightforward case: AD stores `memberOf` and returns it in a default search, so the
+group decides directly and the override stays empty.
+
+```bash
+WARDEN_DIRECTORY_MODE=external
+WARDEN_DOMAIN=corp.example.com          # client-cert email SAN suffix
+BASE_DN=DC=corp,DC=example,DC=com
+
+WARDEN_LDAP_HOST=dc01.corp.example.com
+WARDEN_LDAP_SCHEMA=ad                   # sAMAccountName login, CN= DNs, unicodePwd resets
+WARDEN_LDAP_CA_FILE=/etc/ssl/certs/corp-root-ca.pem
+
+WARDEN_BIND_DN=CN=svc-bigip-bind,OU=Service,DC=corp,DC=example,DC=com
+BIND_PW=<read-only-bind-pw>
+WARDEN_DIR_ADMIN_DN=CN=svc-warden-rotate,OU=Service,DC=corp,DC=example,DC=com
+WARDEN_DIR_ADMIN_PW=<reset-rights-pw>
+
+WARDEN_USER_SEARCH_BASE=OU=Staff,DC=corp,DC=example,DC=com
+WARDEN_PRIV_SEARCH_BASE=OU=PAM,DC=corp,DC=example,DC=com
+WARDEN_ADMIN_GROUP_DN=CN=BigipAdmins,OU=Groups,DC=corp,DC=example,DC=com
+WARDEN_ADMIN_ROLE_ATTRIBUTE=            # empty: derived as memberOf=<the group>
+WARDEN_PRINCIPALS="alice.admin bob.user"
+```
+
+Resolves to login on `sAMAccountName`, privileged DNs built with `CN=`, the rule
+`memberOf=CN=BigipAdmins,…`, OpenBao over `ldaps://dc01.corp.example.com:636`, and no stamp.
+
+Four AD-specific points:
+
+- Create the PAM accounts with **`CN` equal to `sAMAccountName`**, because Warden builds their
+  DN as `<WARDEN_PRIV_DN_ATTR>=<name>,<WARDEN_PRIV_SEARCH_BASE>` from the name you pass in
+  `WARDEN_PRINCIPALS`. Where they must differ, pass explicit DNs to
+  `scripts/configure-openbao-static.sh` instead.
+- `CN=BigipAdmins` must contain those **PAM accounts**, not the staff identities.
+- **Nested groups are not expanded** by the BIG-IP's remote-role — make operators direct
+  members of the group you name.
+- Password resets over LDAP **require LDAPS on the domain controller**; plain 389 refuses
+  them. That is why `WARDEN_LDAP_CA_FILE` is mandatory in external mode.
+
+### OpenLDAP
+The case the override exists for. With the `memberof` overlay, `memberOf` is operational and
+invisible to the BIG-IP, so map on a stored attribute and let Warden stamp it.
+
+```bash
+WARDEN_DIRECTORY_MODE=external
+WARDEN_DOMAIN=example.net
+BASE_DN=dc=example,dc=net
+
+WARDEN_LDAP_HOST=ldap.example.net
+WARDEN_LDAP_SCHEMA=openldap             # uid login, uid= DNs, userPassword resets
+WARDEN_LDAP_CA_FILE=/etc/ssl/certs/example-ca.pem
+
+WARDEN_BIND_DN=cn=bigip-bind,ou=svc,dc=example,dc=net
+BIND_PW=<read-only-bind-pw>
+WARDEN_DIR_ADMIN_DN=cn=warden-rotate,ou=svc,dc=example,dc=net
+WARDEN_DIR_ADMIN_PW=<reset-rights-pw>
+
+WARDEN_USER_SEARCH_BASE=ou=people,dc=example,dc=net
+WARDEN_PRIV_SEARCH_BASE=ou=pam,dc=example,dc=net
+WARDEN_ADMIN_GROUP_DN=cn=bigip-admins,ou=groups,dc=example,dc=net
+WARDEN_ADMIN_ROLE_ATTRIBUTE=employeeType=bigip-admins    # memberOf is invisible here
+WARDEN_PRINCIPALS="alice.admin bob.user"
+```
+
+Resolves to the rule `employeeType=bigip-admins` and the stamp `employeeType: bigip-admins`.
+Keep the group populated as your record of intent, but the attribute is what the BIG-IP acts
+on. If your server stores `memberOf` as an ordinary attribute rather than via the overlay,
+delete the override and let it derive.
+
+### FreeIPA / 389DS
+Start from the OpenLDAP block with these differences. `memberOf` is plugin-written and
+usually returned normally, so try the derived rule first and let the pre-flight decide.
+
+```bash
+BASE_DN=dc=lab,dc=example,dc=com
+WARDEN_USER_SEARCH_BASE=cn=users,cn=accounts,dc=lab,dc=example,dc=com
+WARDEN_ADMIN_GROUP_DN=cn=bigip-admins,cn=groups,cn=accounts,dc=lab,dc=example,dc=com
+WARDEN_PRIV_SEARCH_BASE=ou=pam,dc=lab,dc=example,dc=com
+WARDEN_ADMIN_ROLE_ATTRIBUTE=
+```
+
+Two caveats worth planning around. FreeIPA's account tree is fixed, so a dedicated
+privileged subtree either sits outside IPA management (`ou=pam` at the root, which IPA
+tooling will not manage) or you accept privileged accounts living among ordinary ones in
+`cn=users` — neither is as tidy as an AD OU. And IPA enforces password policy on resets, so
+OpenBao's generated passwords have to satisfy it or rotation fails.
 
 ## Credential model interaction
 `WARDEN_CRED_MODE=ephemeral` has OpenBao *create* throwaway accounts, which means it must
