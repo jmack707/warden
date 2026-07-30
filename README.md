@@ -67,6 +67,7 @@ selectable (`WARDEN_CRED_MODE`): `static` (inject a rotated password the user ne
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | components, data flow, trust boundaries |
 | [docs/directory.md](docs/directory.md) | bring your own AD/LDAP; defining the BIG-IP admin group |
+| [docs/manual-build.md](docs/manual-build.md) | build it a layer at a time, with the why behind each |
 | [docs/adr/](docs/adr/) | the decisions and why |
 | [docs/install.md](docs/install.md) · [deploy.md](docs/deploy.md) · [upgrade.md](docs/upgrade.md) | stack standup, BIG-IP deploy, upgrade/rollback/teardown |
 | [docs/operations/troubleshooting.md](docs/operations/troubleshooting.md) | symptom-first fixes |
