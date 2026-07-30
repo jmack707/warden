@@ -2,8 +2,8 @@
 
 _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x, OpenLDAP (osixia) 1.5.0._
 
-Placeholders below (`<...>`) are the values a customer sets in `.env`; the reference
-build used a Dakota lab. Design decisions are captured in [adr/](adr/).
+Placeholders below (`<...>`) are the values you set in `.env`; the version numbers and
+addresses quoted throughout come from the private lab this was first built on. Design decisions are captured in [adr/](adr/).
 
 ## Context
 BIG-IP management access is usually granted by handing an engineer a standing account, or by
