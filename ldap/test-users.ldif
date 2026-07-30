@@ -44,10 +44,3 @@ sn: Expired
 givenName: Carol
 mail: carol.expired@warden.lab
 userPassword: ${TEST_USER_PW}
-
-dn: ${WARDEN_ADMIN_GROUP_DN}
-objectClass: groupOfNames
-cn: bigip-admins
-description: BIG-IP Admin — members map to the administrator role
-member: uid=alice.admin,${WARDEN_USER_SEARCH_BASE}
-member: uid=carol.expired,${WARDEN_USER_SEARCH_BASE}

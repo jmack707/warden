@@ -27,30 +27,33 @@ certs and the APM front door trusts it. Your directory supplies identity and aut
 not the cert trust anchor.
 
 ## Defining the BIG-IP admin group
-This is one variable:
+One variable:
 
 ```bash
 WARDEN_ADMIN_GROUP_DN=cn=BigipAdmins,ou=Groups,dc=example,dc=com
 ```
 
-The BIG-IP evaluates `WARDEN_ADMIN_ROLE_ATTRIBUTE` — an `<attribute>=<value>` pair — against
-the authenticated user, and grants `administrator` on a match. Its default depends on mode:
+Members of that group get `administrator` on the BIG-IP. Everyone else who authenticates
+stays read-only (`guest`) — deliberate, so a cert holder who is not an admin still reaches
+the webtop and simply cannot change anything.
 
-| Mode | Default mapping | Why |
-|---|---|---|
-| bundled | `employeeType=warden-admins` | the stamp Warden seeds on the demo accounts |
-| external | `memberOf=<WARDEN_ADMIN_GROUP_DN>` | real group membership, which your users already have |
+The BIG-IP does not read groups, though. It evaluates an `<attribute>=<value>` pair against
+the account it authenticated, and only sees attributes a **default** LDAP search returns.
+Warden bridges group to attribute for you, differently per directory:
 
-Override it when your directory expresses "is an admin" some other way — a custom attribute,
-a nested group, `title=...`, whatever the BIG-IP can match:
+| Directory | Bridge |
+|---|---|
+| Bundled OpenLDAP | `memberOf` is operational there and invisible to the BIG-IP, so Warden stamps the group's members with `employeeType=warden-admins` and maps on that |
+| Active Directory | `memberOf` is stored and returned by default; the group is read directly |
+| 389DS / FreeIPA | depends on plugin and ACI configuration — the pre-flight tests it |
+
+You only touch `WARDEN_ADMIN_ROLE_ATTRIBUTE` when that bridge cannot work for your
+directory, or when "is an admin" is expressed some other way entirely — a custom attribute,
+`title=...`, whatever the BIG-IP can match:
 
 ```bash
-WARDEN_ADMIN_ROLE_ATTRIBUTE=memberOf=cn=NetOps,ou=Groups,dc=example,dc=com
+WARDEN_ADMIN_ROLE_ATTRIBUTE=title=network-admin
 ```
-
-Everyone who authenticates but does not match stays read-only (`guest`) — that is the
-default role Warden sets, and it is deliberate: a cert holder who is not an admin still
-reaches the webtop, they just cannot change anything.
 
 ### Two traps worth knowing before you pick a mapping
 Both of these fail the same way — **everyone silently ends up read-only**, with a successful
@@ -61,7 +64,8 @@ identities (`WARDEN_USER_SEARCH_BASE`, what APM looks up after cert auth) from p
 accounts (`WARDEN_PRIV_SEARCH_BASE`, what the BIG-IP actually binds with the injected
 credential). The remote-role is evaluated against the **bound account** — the privileged
 one. Putting your human identity entries in the admin group does nothing; the privileged
-accounts must be the members.
+accounts must be the members. Warden's own seed does exactly this, so
+[`ldap/admin-group.ldif`](../ldap/admin-group.ldif) is a working example of the shape.
 
 **2. The mapping attribute must come back from a default search.** The BIG-IP evaluates
 remote-role against the attributes its own search returns, and it does not ask for extra

@@ -82,6 +82,12 @@ export WARDEN_ADMIN_GROUP_DN_EXPLICIT WARDEN_ADMIN_ROLE_ATTRIBUTE_EXPLICIT
 # The group whose members get Administrator on the target BIG-IP. Everyone else who
 # authenticates lands on the default role (guest / read-only).
 WARDEN_ADMIN_GROUP_DN="${WARDEN_ADMIN_GROUP_DN:-cn=bigip-admins,ou=groups,${BASE_DN}}"
+# The group's own name, taken from its DN. The bundled seed needs it as an attribute, and
+# hardcoding it meant a custom WARDEN_ADMIN_GROUP_DN produced an entry whose cn contradicted
+# its RDN, which the directory rejects.
+WARDEN_ADMIN_GROUP_RDN_ATTR="$(printf '%s' "${WARDEN_ADMIN_GROUP_DN%%=*}" | tr 'A-Z' 'a-z')"
+WARDEN_ADMIN_GROUP_CN="${WARDEN_ADMIN_GROUP_DN#*=}"; WARDEN_ADMIN_GROUP_CN="${WARDEN_ADMIN_GROUP_CN%%,*}"
+export WARDEN_ADMIN_GROUP_CN WARDEN_ADMIN_GROUP_RDN_ATTR
 
 # How the BIG-IP's remote-role decides "is this user an admin" — an <attribute>=<value>
 # string it evaluates against the authenticated user's LDAP attributes.

@@ -117,7 +117,7 @@ if warden_is_bundled; then
   ./scripts/gen-test-users.sh "${BASE_DN}" seed
   # privileged ACCESS accounts (alice=admin via the role stamp, bob=non-admin); OpenBao
   # rotates their password and the BIG-IP binds it. Distinct from the identity entries.
-  for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
+  for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif ldap/admin-group.ldif; do
     ldif_apply "${ldif##*/}" "$ldif"
   done
   ./scripts/configure-openbao-static.sh alice.admin bob.user

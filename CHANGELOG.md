@@ -4,6 +4,22 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
 ## 2026-07-30
+### Changed
+- **The admin group is now the single setting that decides who is an administrator**, and it
+  means the same thing in both directory modes. Previously `WARDEN_ADMIN_GROUP_DN` named a
+  group that, in bundled mode, decided nothing — the seeded group held *identity* entries
+  while the BIG-IP evaluates *privileged* accounts, so authorization came entirely from an
+  `employeeType` stamp and renaming the group changed nothing. The group is now seeded from
+  [ldap/admin-group.ldif](ldap/admin-group.ldif) over the privileged accounts, and Warden
+  stamps its members because OpenLDAP's `memberOf` is operational and unreadable by the
+  BIG-IP. `WARDEN_ADMIN_ROLE_ATTRIBUTE` becomes an advanced override for directories that
+  cannot express it the derived way, and moves to the advanced block.
+
+### Fixed
+- The seeded admin group hardcoded `cn: bigip-admins` while its DN was templated, so any
+  custom `WARDEN_ADMIN_GROUP_DN` produced an entry whose `cn` contradicted its RDN and was
+  rejected by the directory. The name is now derived from the DN.
+
 ### Added
 - **The admin mapping is now verified by the tooling, not just documented**
   (`scripts/lib/authz.sh`). The failure it catches is silent: the BIG-IP evaluates

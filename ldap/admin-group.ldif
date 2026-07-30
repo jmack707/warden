@@ -1,0 +1,14 @@
+# The BIG-IP admin group. Its members are the PRIVILEGED accounts — the ones the BIG-IP
+# binds and evaluates — not the human identity entries under ou=people. Putting identities
+# here would look right and grant nothing.
+#
+# Seeded after ldap/warden-users.ldif so the member DN already exists. Warden also stamps
+# these accounts with the role attribute, because the BIG-IP cannot read OpenLDAP's memberOf
+# (it is operational there): the group is the source of truth, the stamp is how the BIG-IP
+# is told. In a directory that returns memberOf normally, such as AD, the group is read
+# directly and no stamp is involved.
+dn: ${WARDEN_ADMIN_GROUP_DN}
+objectClass: groupOfNames
+cn: ${WARDEN_ADMIN_GROUP_CN}
+description: BIG-IP administrators — members are granted the administrator role
+member: uid=alice.admin,${WARDEN_PRIV_SEARCH_BASE}
