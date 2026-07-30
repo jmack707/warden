@@ -40,9 +40,21 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 - First-run `deploy.sh` failed at step 5: the openldap container chowns `certs/` when the
   stack comes up (between `gen-certs.sh` and the client-cert signing). The reclaim logic
   moved to `scripts/lib/certs.sh` and now runs before signing in `gen-test-users.sh` too.
-- Removed the remaining hardcoded directory/site values: the seed and OpenBao LDIFs no
-  longer bake in `dc=warden,dc=lab` (they are templated per `.env`, so changing `BASE_DN`
-  works), and the bundled compose reads `WARDEN_DOMAIN`.
+- **Changing `BASE_DN` actually works now.** `ldap/seed.ldif` and `ldap/test-users.ldif`
+  still hardcoded `dc=warden,dc=lab` (only `${BIND_PW}` was templated), so any other value
+  made every seed entry land outside the directory suffix — slapd answered `unwilling to
+  perform: no global superior knowledge`, the deploy continued anyway, and the first visible
+  symptom was an opaque OpenBao 500 (`LDAP Result Code 32 No Such Object`) four steps later.
+  Both files, the OpenBao LDIFs and the bind ACL are now templated, and the bundled compose
+  reads `WARDEN_DOMAIN`.
+- **Seeding failures stop the deploy** (`scripts/lib/ldif.sh`). LDIF loading was
+  `... | grep -v ... || true`, which swallowed every error; a half-seeded directory then
+  failed confusingly much later. `ldif_apply` tolerates "already exists" (idempotent
+  re-runs) and aborts on anything else, naming the likely `.env` cause.
+- **Container readiness is polled, not slept.** A fixed `sleep 5` raced the OpenLDAP
+  first-run bootstrap on a fresh volume; `wait_for_ldap` polls the admin bind the seeding
+  itself uses (anonymous probes are useless here — osixia denies anonymous reads and returns
+  "No such object" for the base entry even when the server is up).
 - Removed the remaining hardcoded site-specific values: `apm-build.sh` no longer falls
   back to a hardcoded VIP (`WARDEN_APM_VIP` is required), `import-browser-certs.sh` takes
   `WARDEN_VM` (required) + `WARDEN_REMOTE_DIR` (default `/opt/warden`), and the reference

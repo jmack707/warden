@@ -49,6 +49,8 @@ COMPOSE_MISSING=0
 set -a; . ./.env; set +a
 # shellcheck disable=SC1091
 . ./scripts/lib/directory.sh
+# shellcheck disable=SC1091
+. ./scripts/lib/ldif.sh
 
 # fail early on unfilled placeholders
 miss=0
@@ -88,11 +90,13 @@ if warden_is_bundled; then
 else
   docker compose up -d          # openbao only; your directory is already running
 fi
-sleep 5
+# poll instead of sleeping: on a fresh volume the container's first-run bootstrap takes
+# much longer than a fixed sleep, and seeding into a half-initialized slapd fails
+warden_is_bundled && wait_for_ldap 90
 
 if warden_is_bundled; then
   echo "== 3/7 seed the bundled directory + bind ACL =="
-  envsubst < ldap/seed.ldif | ldapadd -x -H "ldap://${WARDEN_LDAP_HOST}" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" -c 2>&1 | grep -viE "already exists|^adding" || true
+  ldif_apply "seed" ldap/seed.ldif
   envsubst < ldap/acl-bigip-bind.ldif | docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// 2>&1 | grep -viE "^modifying|^SASL" || true
 else
   echo "== 3/7 external directory (${WARDEN_LDAP_HOST}) — nothing seeded, nothing modified =="
@@ -111,7 +115,7 @@ if warden_is_bundled; then
   # privileged ACCESS accounts (alice=admin via the role stamp, bob=non-admin); OpenBao
   # rotates their password and the BIG-IP binds it. Distinct from the identity entries.
   for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
-    envsubst < "$ldif" | ldapadd -x -c -H "ldap://${WARDEN_LDAP_HOST}" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" 2>&1 | grep -viE "^adding|already exists" || true
+    ldif_apply "${ldif##*/}" "$ldif"
   done
   ./scripts/configure-openbao-static.sh alice.admin bob.user
 else
@@ -129,7 +133,7 @@ fi
 if [ -n "$LDAP_NEEDS_RESTART" ]; then
   echo "== restart openldap to load the regenerated certs =="
   docker compose restart openldap
-  sleep 5
+  wait_for_ldap 90
 fi
 fi   # end DO_STACK
 
