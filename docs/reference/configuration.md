@@ -22,8 +22,8 @@ consistent everywhere. Two rules make the rest of this page readable:
 |---|---|---|---|---|
 | `WARDEN_HOST_IP` | IPv4 | `<this-host-ip>` | yes | Docker host / OpenBao address; the bundled LDAPS cert SAN must match it |
 | `WARDEN_DIRECTORY_MODE` | enum `bundled`\|`external` | `bundled` | no | `bundled` runs Warden's own OpenLDAP; `external` uses your AD/LDAP and creates nothing in it ([directory.md](../directory.md)) |
-| `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | **The BIG-IP admin group** — its members get Administrator; everyone else read-only |
-| `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | bundled `employeeType=warden-admins`, external `memberOf=${WARDEN_ADMIN_GROUP_DN}` | no | What the BIG-IP remote-role matches to grant Administrator |
+| `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | Names the admin group object: created in bundled mode, required to exist in external mode, and the source of the external default below. It grants nothing on its own — see the note under this table |
+| `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | bundled `employeeType=warden-admins`, external `memberOf=${WARDEN_ADMIN_GROUP_DN}` | no | **The rule that actually grants Administrator.** Pushed to the BIG-IP as `remote-role`, evaluated against the privileged account it authenticated |
 | `WARDEN_LDAP_HOST` | host/IPv4 | `${WARDEN_HOST_IP}` | external only | Your directory address |
 | `WARDEN_LDAP_PORT` / `WARDEN_LDAPS_PORT` | int | `389` / `636` | no | APM AAA query port / LDAPS port |
 | `WARDEN_LDAP_SCHEMA` | enum `openldap`\|`ad` | `openldap` | no | `ad` resets `unicodePwd` and defaults the login attribute to `sAMAccountName` |
@@ -45,7 +45,7 @@ consistent everywhere. Two rules make the rest of this page readable:
 | `BAO_TOKEN` | string | `root` (dev) / generated (prod) | yes | OpenBao token; production value is written by `openbao-init-unseal.sh` |
 | `TEST_USER_PW` | string | `<change-me>` | for test users | Password for the alice/bob/carol test principals (lab only) |
 | `WARDEN_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
-| `WARDEN_DOMAIN` | DNS domain | `warden.lab` | yes | Bundled directory's domain. Drives the OpenLDAP container's suffix and the LDAPS certificate CN/SAN, so it must correspond to `BASE_DN` |
+| `WARDEN_DOMAIN` | DNS domain | `warden.lab` | yes | Bundled: the OpenLDAP container's suffix and its LDAPS certificate CN/SAN, so it must correspond to `BASE_DN`. **Both modes**: the email SAN on issued client certificates (`<user>@<domain>`) |
 | `WARDEN_DIR_ADMIN_PW` | string | bundled: `LDAP_ADMIN_PW` | external only | Password for `WARDEN_DIR_ADMIN_DN` — the account OpenBao binds as to reset privileged-account passwords |
 | `WARDEN_BIGIP_B_MGMT` | IPv4 | _(empty)_ | no | HA peer's management address. **Empty selects the single-BIG-IP path**; setting it adds the peer's TMUI as a second webtop bookmark |
 | `WARDEN_BIGIP_B_TMUI` | IPv4 | _(empty)_ | with peer | The peer's internal self-IP that APM proxies to for its TMUI. Required whenever `WARDEN_BIGIP_B_MGMT` is set |
@@ -62,6 +62,23 @@ consistent everywhere. Two rules make the rest of this page readable:
 | `httpd.matchclient` (sys db) | `false` | disable "Require Consistent Inbound IP"; proxied TMUI session survives SNAT source changes |
 | `auth-pam-validate-ip` (sys httpd) | `off` | same, at the PAM layer — both units |
 | external `external-self`/`ext_float` `allow-service` | none (`[]`) | no TMUI/SSH on the external VLAN (ADR 0003 hardening) |
+
+### How the two admin settings relate
+`WARDEN_ADMIN_GROUP_DN` names a group; `WARDEN_ADMIN_ROLE_ATTRIBUTE` is the test the BIG-IP
+applies. Only the second grants anything, and the two are linked in exactly one case:
+
+| Mode | What decides Administrator | Effect of changing `WARDEN_ADMIN_GROUP_DN` |
+|---|---|---|
+| `bundled` | the `employeeType=warden-admins` stamp Warden seeds on the privileged accounts | renames the seeded group; **does not change who is an administrator** |
+| `external` | `WARDEN_ADMIN_ROLE_ATTRIBUTE`, which defaults to `memberOf=<that group>` | changes the decision, unless you set `WARDEN_ADMIN_ROLE_ATTRIBUTE` explicitly |
+
+The BIG-IP searches `WARDEN_PRIV_SEARCH_BASE` and evaluates the **privileged account** it
+just bound — not the human identity entry in `WARDEN_USER_SEARCH_BASE`. So group membership
+has to be held by the privileged accounts. It must also survive a *default* LDAP search: an
+operational attribute such as `memberOf` from OpenLDAP's memberof overlay is invisible to
+the BIG-IP, and every user then silently lands read-only.
+`scripts/preflight-directory.sh` checks both conditions; [directory.md](../directory.md)
+explains the model.
 
 ## Key BIG-IP object names (partition `/Common`, prefix `warden-apm`)
 | Object | Name |
