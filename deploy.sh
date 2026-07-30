@@ -3,9 +3,22 @@
 # directory + OpenBao, and builds the APM front door on the target BIG-IP(s).
 #
 # Prereqs: docker + the compose plugin (docker compose), openssl/ldap-utils/jq on this host, and REST reach to
-# the BIG-IP management address(es) in .env. Run from the repo root:  ./deploy.sh
+# the BIG-IP management address(es) in .env. Run from the repo root:
+#   ./deploy.sh                 everything (default)
+#   ./deploy.sh --stack         the OSS core only (certs, containers, directory, OpenBao)
+#                               — no BIG-IP is contacted, so BIGIP_* need not be set
+#   ./deploy.sh --bigip         the BIG-IP config only (assumes the stack is already up)
+# Mirrors teardown.sh, which takes the same three forms.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; cd "$HERE"
+
+DO_STACK=0; DO_BIGIP=0
+while [ $# -gt 0 ]; do case "$1" in
+  --stack) DO_STACK=1;; --bigip) DO_BIGIP=1;; --all) DO_STACK=1; DO_BIGIP=1;;
+  -h|--help) sed -n '2,12p' "$0"; exit 0;;
+  *) echo "unknown arg: $1 (see --help)" >&2; exit 2;;
+esac; shift; done
+[ $((DO_STACK+DO_BIGIP)) -gt 0 ] || { DO_STACK=1; DO_BIGIP=1; }
 
 # preflight: fail before touching anything if a prereq binary is missing
 missing=""
@@ -39,7 +52,8 @@ set -a; . ./.env; set +a
 
 # fail early on unfilled placeholders
 miss=0
-REQ="WARDEN_HOST_IP BASE_DN BIND_PW BIGIP_MGMT BIGIP_PASS WARDEN_APM_VIP"
+REQ="WARDEN_HOST_IP BASE_DN BIND_PW"
+[ $DO_BIGIP = 1 ] && REQ="$REQ BIGIP_MGMT BIGIP_PASS WARDEN_APM_VIP"
 if warden_is_bundled; then
   REQ="$REQ LDAP_ADMIN_PW TEST_USER_PW"
 else
@@ -52,9 +66,14 @@ done
 [ "$miss" = 0 ] || { echo "fill the values above in .env, then re-run" >&2; exit 1; }
 PEER_NOTE="single standalone BIG-IP"; [ -n "${WARDEN_BIGIP_B_MGMT:-}" ] && PEER_NOTE="HA pair (peer ${WARDEN_BIGIP_B_MGMT})"
 
-echo "== Warden deploy — target ${BIGIP_MGMT} (${PEER_NOTE}), VIP ${WARDEN_APM_VIP} =="
+if [ $DO_BIGIP = 1 ]; then
+  echo "== Warden deploy — target ${BIGIP_MGMT} (${PEER_NOTE}), VIP ${WARDEN_APM_VIP} =="
+else
+  echo "== Warden deploy — OSS stack only (no BIG-IP will be contacted) =="
+fi
 warden_directory_summary
 
+if [ $DO_STACK = 1 ]; then
 echo "== 1/7 TLS material (client-cert CA; LDAPS server cert when bundled) =="
 ./scripts/gen-certs.sh
 
@@ -111,6 +130,17 @@ if [ -n "$LDAP_NEEDS_RESTART" ]; then
   echo "== restart openldap to load the regenerated certs =="
   docker compose restart openldap
   sleep 5
+fi
+fi   # end DO_STACK
+
+if [ $DO_BIGIP = 0 ]; then
+  cat <<EOF
+
+== stack up (no BIG-IP contacted) ==
+Verify:  ./scripts/validate-phase1.sh
+Then configure a BIG-IP with:  ./deploy.sh --bigip
+EOF
+  exit 0
 fi
 
 echo "== 6/7 BIG-IP auth (LDAPS system-auth + remote-role: ${WARDEN_ADMIN_ROLE_ATTRIBUTE}) =="
