@@ -6,10 +6,10 @@
 #
 # Separate from the ou=people identity entry (which drives the APM group decision): this
 # is the privileged *access* account, per the Warden identity/privilege split.
-dn: uid=alice.admin,ou=users,dc=warden,dc=lab
+dn: uid=alice.admin,${WARDEN_PRIV_SEARCH_BASE}
 objectClass: inetOrgPerson
 uid: alice.admin
 cn: alice.admin
 sn: PrivilegedAccount
-employeeType: warden-admins
+${WARDEN_PRIV_STAMP_LDIF}
 userPassword: rotate-me-immediately

@@ -21,10 +21,18 @@ done
 
 [ -f .env ] || { echo "no .env — copy .env.example to .env and fill in the <angle-bracket> values" >&2; exit 1; }
 set -a; . ./.env; set +a
+# shellcheck disable=SC1091
+. ./scripts/lib/directory.sh
 
 # fail early on unfilled placeholders
 miss=0
-for v in WARDEN_HOST_IP BASE_DN LDAP_ADMIN_PW BIND_PW BIGIP_MGMT BIGIP_PASS WARDEN_APM_VIP; do
+REQ="WARDEN_HOST_IP BASE_DN BIND_PW BIGIP_MGMT BIGIP_PASS WARDEN_APM_VIP"
+if warden_is_bundled; then
+  REQ="$REQ LDAP_ADMIN_PW TEST_USER_PW"
+else
+  REQ="$REQ WARDEN_LDAP_HOST WARDEN_DIR_ADMIN_DN WARDEN_DIR_ADMIN_PW WARDEN_LDAP_CA_FILE WARDEN_ADMIN_GROUP_DN"
+fi
+for v in $REQ; do
   val="${!v:-}"
   case "$val" in ""|*"<"*">"*) echo "  .env: set $v"; miss=1;; esac
 done
@@ -32,33 +40,56 @@ done
 PEER_NOTE="single standalone BIG-IP"; [ -n "${WARDEN_BIGIP_B_MGMT:-}" ] && PEER_NOTE="HA pair (peer ${WARDEN_BIGIP_B_MGMT})"
 
 echo "== Warden deploy — target ${BIGIP_MGMT} (${PEER_NOTE}), VIP ${WARDEN_APM_VIP} =="
+warden_directory_summary
 
-echo "== 1/7 TLS material (CA + LDAPS server cert) =="
+echo "== 1/7 TLS material (client-cert CA; LDAPS server cert when bundled) =="
 ./scripts/gen-certs.sh
 
-echo "== 2/7 bring up OpenBao + OpenLDAP =="
+echo "== 2/7 bring up OpenBao${WARDEN_BUNDLED_NOTE:- + OpenLDAP} =="
 # note whether openldap predates the certs we just regenerated: slapd only reads TLS
 # material at startup, so it must be restarted before the BIG-IP steps — but NOT here:
 # the container chowns certs/ on start, and steps 3-5 still sign with certs/ca.key
-LDAP_NEEDS_RESTART="$(docker ps -q -f name='^openldap$')"
-docker compose up -d
+LDAP_NEEDS_RESTART=""
+if warden_is_bundled; then
+  LDAP_NEEDS_RESTART="$(docker ps -q -f name='^openldap$')"
+  docker compose --profile bundled up -d
+else
+  docker compose up -d          # openbao only; your directory is already running
+fi
 sleep 5
 
-echo "== 3/7 seed the directory + bind ACL =="
-envsubst < ldap/seed.ldif | ldapadd -x -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -c 2>&1 | grep -viE "already exists|^adding" || true
-docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// < ldap/acl-bigip-bind.ldif 2>&1 | grep -viE "^modifying|^SASL" || true
+if warden_is_bundled; then
+  echo "== 3/7 seed the bundled directory + bind ACL =="
+  envsubst < ldap/seed.ldif | ldapadd -x -H "ldap://${WARDEN_LDAP_HOST}" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" -c 2>&1 | grep -viE "already exists|^adding" || true
+  envsubst < ldap/acl-bigip-bind.ldif | docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// 2>&1 | grep -viE "^modifying|^SASL" || true
+else
+  echo "== 3/7 external directory (${WARDEN_LDAP_HOST}) — nothing seeded, nothing modified =="
+  echo "   identities:  ${WARDEN_USER_SEARCH_BASE}"
+  echo "   privileged:  ${WARDEN_PRIV_SEARCH_BASE}   (OpenBao rotates passwords HERE)"
+  echo "   admin group: ${WARDEN_ADMIN_GROUP_DN}"
+  ./scripts/preflight-directory.sh || { echo "directory pre-flight failed — fix the above, then re-run" >&2; exit 1; }
+fi
 
 echo "== 4/7 configure OpenBao (LDAP secrets engine + audit) =="
 ./scripts/configure-openbao.sh
 
-echo "== 5/7 test principals + client certs, static roles for injection =="
-./scripts/gen-test-users.sh "${BASE_DN}" seed
-# ou=users privileged ACCESS accounts (alice=admin via employeeType, bob=non-admin); OpenBao
-# rotates their password and the BIG-IP binds it. Distinct from the ou=people identities above.
-for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
-  ldapadd -x -c -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" -f "$ldif" 2>&1 | grep -viE "^adding|already exists" || true
-done
-./scripts/configure-openbao-static.sh alice.admin bob.user
+echo "== 5/7 client certs + static roles for injection =="
+if warden_is_bundled; then
+  ./scripts/gen-test-users.sh "${BASE_DN}" seed
+  # privileged ACCESS accounts (alice=admin via the role stamp, bob=non-admin); OpenBao
+  # rotates their password and the BIG-IP binds it. Distinct from the identity entries.
+  for ldif in ldap/warden-users.ldif ldap/remote-roles.ldif; do
+    envsubst < "$ldif" | ldapadd -x -c -H "ldap://${WARDEN_LDAP_HOST}" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" 2>&1 | grep -viE "^adding|already exists" || true
+  done
+  ./scripts/configure-openbao-static.sh alice.admin bob.user
+else
+  # external: Warden creates no accounts. Issue client certs for the principals you name
+  # in WARDEN_PRINCIPALS, and take over the password of each matching privileged account.
+  : "${WARDEN_PRINCIPALS:?external mode: set WARDEN_PRINCIPALS to the CNs to issue certs + static roles for (space-separated)}"
+  ./scripts/gen-client-certs.sh $WARDEN_PRINCIPALS
+  # shellcheck disable=SC2086
+  ./scripts/configure-openbao-static.sh $WARDEN_PRINCIPALS
+fi
 ./scripts/configure-openbao-phase2.sh   # scoped token policy for the APM fetch
 
 # all local cert signing is done — now slapd can pick up the regenerated TLS material
@@ -69,7 +100,7 @@ if [ -n "$LDAP_NEEDS_RESTART" ]; then
   sleep 5
 fi
 
-echo "== 6/7 BIG-IP auth (LDAPS system-auth + remote-role) =="
+echo "== 6/7 BIG-IP auth (LDAPS system-auth + remote-role: ${WARDEN_ADMIN_ROLE_ATTRIBUTE}) =="
 BIGIP_PASS="$BIGIP_PASS" ./bigip/phase1-target-rest.sh
 
 echo "== 7/7 APM front door (cert auth + credential injection + webtop) =="

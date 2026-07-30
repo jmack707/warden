@@ -8,13 +8,15 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
+# shellcheck disable=SC1091
+. "${HERE}/lib/directory.sh"
 bao(){ docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="${BAO_TOKEN}" openbao bao "$@"; }
 CNS=("$@"); [ ${#CNS[@]} -gt 0 ] || CNS=(alice.admin)
 
 for CN in "${CNS[@]}"; do
   echo "== static role for ${CN} =="
   bao write "ldap/static-role/${CN}" \
-    dn="uid=${CN},ou=users,${BASE_DN}" \
+    dn="${WARDEN_PRIV_DN_ATTR}=${CN},${WARDEN_PRIV_SEARCH_BASE}" \
     username="${CN}" \
     rotation_period=24h >/dev/null
   echo "  rotating to a fresh random password..."

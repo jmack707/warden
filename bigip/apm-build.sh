@@ -16,6 +16,10 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 _PASS_IN="${BIGIP_PASS:-}"; set -a; . "${HERE}/../.env"; set +a
+# shellcheck disable=SC1091
+. "${HERE}/../scripts/lib/directory.sh"
+# shellcheck disable=SC1091
+. "${HERE}/lib/objects.sh"
 [ -n "$_PASS_IN" ] && BIGIP_PASS="$_PASS_IN"
 : "${BIGIP_PASS:?export BIGIP_PASS}"; : "${BIND_PW:?need BIND_PW}"
 : "${APM_TOKEN:?export APM_TOKEN (scoped OpenBao token from scripts/mint-apm-token.sh)}"
@@ -26,10 +30,10 @@ P=warden-apm                      # object-name prefix / access-profile name
 PART=Common
 CA=warden-ca.crt              # installed in Phase 1
 AAA=warden-openldap-aaa
-LDAP_HOST="${WARDEN_HOST_IP}"     # OpenLDAP + OpenBao host (the warden VM)
-PEOPLE="ou=people,${BASE_DN}"
-BINDDN="cn=bigip-bind,ou=svc,${BASE_DN}"
-GROUP_DN="cn=bigip-admins,ou=groups,${BASE_DN}"   # "BIG-IP Admin" group
+LDAP_HOST="${WARDEN_LDAP_HOST}"                   # directory the AAA queries (bundled or yours)
+PEOPLE="${WARDEN_USER_SEARCH_BASE}"               # identity subtree
+BINDDN="${WARDEN_BIND_DN}"                        # read-only search bind
+GROUP_DN="${WARDEN_ADMIN_GROUP_DN}"               # "BIG-IP Admin" group (authz lives on the BIG-IP, deviation 13)
 VIP_IP="${WARDEN_APM_VIP:?set WARDEN_APM_VIP in .env}"
 # Shadow façades (RFC5737 TEST-NET-1) — APM portal access refuses "reserved" targets
 # (self-IPs, mgmt, device-trust/cluster addrs -> 01490585/errorcode=17, deviation 10),
@@ -66,38 +70,15 @@ add "$B/mgmt/tm/ltm/profile/client-ssl" "$(jq -n --arg n "${P}-clientssl" --arg 
 step "2. LTM pool + APM AAA LDAP server (bind = bigip-bind, for the memberOf query) via tmsh"
 # TMOS 21.x APM AAA LDAP requires a server POOL (bare address is rejected). Create the
 # pool then the AAA referencing it. Single-quote wrap so the DN commas/quotes pass.
-TMSH_AAA="tmsh create ltm pool ${AAA}-pool { members add { ${LDAP_HOST}:389 } monitor tcp } ; tmsh create apm aaa ldap ${AAA} { pool ${AAA}-pool port 389 admin-dn \"${BINDDN}\" admin-encrypted-password \"${BIND_PW}\" base-dn \"${PEOPLE}\" }"
+TMSH_AAA="tmsh create ltm pool ${AAA}-pool { members add { ${LDAP_HOST}:${WARDEN_LDAP_PORT} } monitor tcp } ; tmsh create apm aaa ldap ${AAA} { pool ${AAA}-pool port ${WARDEN_LDAP_PORT} admin-dn \"${BINDDN}\" admin-encrypted-password \"${BIND_PW}\" base-dn \"${PEOPLE}\" }"
 curl "${A[@]}" -X POST -H 'Content-Type: application/json' "$B/mgmt/tm/util/bash" \
   -d "$(jq -n --arg u "-c '${TMSH_AAA}'" '{command:"run",utilCmdArgs:$u}')" \
   | jq -r '.commandResult // "  created pool + warden-openldap-aaa"'
 
 step "2b. teardown the mutable graph (VIP/profile/policy/items/agents) so this re-runs cleanly"
+# object list is shared with teardown.sh (bigip/lib/objects.sh) so the two cannot drift
 td(){ curl "${A[@]}" -o /dev/null -w "  DEL ${1##*~} -> %{http_code}\n" -X DELETE "$1"; }
-td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-test-vs"
-td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-shadow-a-vs"
-td "$B/mgmt/tm/ltm/virtual/~${PART}~${P}-shadow-b-vs"
-td "$B/mgmt/tm/apm/profile/access/~${PART}~${P}"
-td "$B/mgmt/tm/apm/policy/access-policy/~${PART}~${P}"
-for it in ent act_certauth act_varassign act_ldapquery act_groupcheck act_baofetch act_ssocreds act_ssomap act_resourceassign end_allow end_deny; do
-  td "$B/mgmt/tm/apm/policy/policy-item/~${PART}~${P}_${it}"; done
-td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_varassign_ag"
-td "$B/mgmt/tm/apm/policy/agent/aaa-ldap/~${PART}~${P}_act_ldapquery_ag"
-td "$B/mgmt/tm/apm/policy/agent/irule-event/~${PART}~${P}_act_baofetch_ag"
-td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssocreds_ag"
-td "$B/mgmt/tm/apm/policy/agent/variable-assign/~${PART}~${P}_act_ssomap_ag"
-td "$B/mgmt/tm/apm/policy/agent/resource-assign/~${PART}~${P}_act_resourceassign_ag"
-td "$B/mgmt/tm/apm/policy/agent/ending-allow/~${PART}~${P}_end_allow_ag"
-td "$B/mgmt/tm/apm/policy/agent/ending-deny/~${PART}~${P}_end_deny_ag"
-td "$B/mgmt/tm/apm/resource/portal-access/~${PART}~${P}-bigipa-tmui"
-td "$B/mgmt/tm/apm/resource/portal-access/~${PART}~${P}-bigipb-tmui"
-td "$B/mgmt/tm/apm/resource/webtop/~${PART}~${P}-webtop"
-td "$B/mgmt/tm/apm/sso/form-based/~${PART}~${P}-tmui-sso"
-td "$B/mgmt/tm/apm/profile/connectivity/~${PART}~${P}-connectivity"
-td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-openbao-fetch"
-td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-referer-strip"
-td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-a-node"
-td "$B/mgmt/tm/ltm/rule/~${PART}~${P}-shadow-b-node"
-td "$B/mgmt/tm/ltm/data-group/internal/~${PART}~warden_openbao_dg"
+while IFS= read -r o; do td "$B/mgmt/tm/${o}"; done < <(warden_apm_objects "$P" "$PART")
 
 step "3. agents: variable-assign (extract CN) + aaa-ldap (query, GROUP folded into filter)"
 add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_varassign_ag" \
@@ -107,7 +88,7 @@ add "$B/mgmt/tm/apm/policy/agent/variable-assign" "$(jq -n --arg n "${P}_act_var
 # identity => reach webtop/TMUI. The remote BIG-IP's remote-role then decides the role:
 # bigip-admins members (employeeType=warden-admins on their ou=users access acct) -> admin,
 # everyone else -> default read-only (guest). GROUP_DN kept above for reference only.
-add "$B/mgmt/tm/apm/policy/agent/aaa-ldap" "$(jq -n --arg n "${P}_act_ldapquery_ag" --arg s "/$PART/$AAA" --arg base "$PEOPLE" --arg f "(uid=%{session.custom.cn})" \
+add "$B/mgmt/tm/apm/policy/agent/aaa-ldap" "$(jq -n --arg n "${P}_act_ldapquery_ag" --arg s "/$PART/$AAA" --arg base "$PEOPLE" --arg f "(${WARDEN_LOGIN_ATTR}=%{session.custom.cn})" \
   '{name:$n,partition:"Common",type:"query",server:$s,searchDn:$base,filter:$f}')"
 
 step "4. ending agents + customization groups"

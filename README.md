@@ -21,6 +21,10 @@ Warden runs its own OpenBao + OpenLDAP in Docker. You bring **one BIG-IP** (or a
 with APM provisioned and licensed, and put its address in `.env`. Everything else — the CA,
 certs, directory, OpenBao roles, and APM policy — the demo builds.
 
+Already have a directory? Set `WARDEN_DIRECTORY_MODE=external` and Warden uses **your AD or
+LDAP** instead, creating nothing in it — you define which group grants BIG-IP admin
+(`WARDEN_ADMIN_GROUP_DN`). See [docs/directory.md](docs/directory.md).
+
 ## Request flow (one line)
 client cert → APM extracts CN → LDAP identity check → OpenBao rotates + fetches the password
 → webtop → SSO into the target's TMUI → the BIG-IP authorizes by remote-role (admin vs
@@ -44,6 +48,14 @@ Then browse `https://<WARDEN_APM_VIP>/` with a client cert —
 [docs/operations/runbooks/browser-verify.md](docs/operations/runbooks/browser-verify.md).
 Expected: `alice.admin` → admin webtop, `bob.user` → read-only, `carol.expired` → rejected.
 
+## Teardown
+```bash
+./teardown.sh --all --dry-run     # show what would be removed
+./teardown.sh --all               # remove the BIG-IP config + local stack
+```
+Auth source returns to local first (admin/root are never affected), and an external
+directory is never modified — [docs/upgrade.md](docs/upgrade.md#teardown).
+
 ## Configuration
 Everything is driven by `.env` — see [.env.example](.env.example) and the full reference in
 [docs/reference/configuration.md](docs/reference/configuration.md). The credential model is
@@ -54,6 +66,7 @@ selectable (`WARDEN_CRED_MODE`): `static` (inject a rotated password the user ne
 | Doc | For |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | components, data flow, trust boundaries |
+| [docs/directory.md](docs/directory.md) | bring your own AD/LDAP; defining the BIG-IP admin group |
 | [docs/adr/](docs/adr/) | the decisions and why |
 | [docs/install.md](docs/install.md) · [deploy.md](docs/deploy.md) · [upgrade.md](docs/upgrade.md) | stack standup, BIG-IP deploy, upgrade/rollback/teardown |
 | [docs/operations/troubleshooting.md](docs/operations/troubleshooting.md) | symptom-first fixes |
