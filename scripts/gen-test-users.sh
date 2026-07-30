@@ -49,9 +49,13 @@ for u in alice.admin bob.user carol.expired; do
   printf '  %-14s ' "$u"; openssl verify -CAfile "$CERTS/ca.crt" "$CLIENTS/$u.crt" 2>&1 | sed "s#$CLIENTS/##"
 done
 set -e
-echo "  -- memberOf (alice+carol in bigip-admins; bob none) --"
+echo "  -- identity entries seeded (the certs above authenticate AS these) --"
 for u in alice.admin bob.user carol.expired; do
-  printf '  %-14s memberOf=' "$u"
-  ldapsearch -x -LLL -H "ldap://${WARDEN_HOST_IP}" -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}" \
-    -b "uid=$u,ou=people,${BASE_DN}" memberOf 2>/dev/null | grep -i "^memberOf:" | sed 's/memberOf: //' | paste -sd, || echo "(none)"
+  printf '  %-14s ' "$u"
+  ldapsearch -x -LLL -H "ldap://${WARDEN_LDAP_HOST}" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" \
+    -b "${WARDEN_LOGIN_ATTR}=$u,${WARDEN_USER_SEARCH_BASE}" -s base dn 2>/dev/null \
+    | sed 's/^dn: /present: /' | head -1 || echo "MISSING"
 done
+# Deliberately no group/admin check here: the admin group and the privileged accounts it
+# contains are seeded later (ldap/admin-group.ldif), and deploy.sh verifies the resulting
+# mapping the way the BIG-IP will — see scripts/lib/authz.sh.

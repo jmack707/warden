@@ -20,17 +20,17 @@ declare -F note >/dev/null || note() { printf '       %s\n' "$*"; }
 # does not mention it, so the group has no bearing on who becomes an administrator.
 # Returns 0 always: this is advice, not a failure.
 warden_warn_unused_admin_group() {
-  [ "${WARDEN_ADMIN_GROUP_DN_EXPLICIT:-0}" = 1 ] || return 0
+  # Only a problem when the operator overrode the rule themselves. Left alone, bundled mode
+  # honours the group by stamping its members and external mode maps on it directly.
+  [ "${WARDEN_ADMIN_ROLE_ATTRIBUTE_EXPLICIT:-0}" = 1 ] || return 0
   case "$WARDEN_ADMIN_ROLE_ATTRIBUTE" in *"$WARDEN_ADMIN_GROUP_DN"*) return 0;; esac
   echo
-  echo "  NOTE: WARDEN_ADMIN_GROUP_DN is set to"
+  echo "  NOTE: you set WARDEN_ADMIN_ROLE_ATTRIBUTE=${WARDEN_ADMIN_ROLE_ATTRIBUTE}"
+  echo "        which does not reference WARDEN_ADMIN_GROUP_DN"
   echo "          ${WARDEN_ADMIN_GROUP_DN}"
-  echo "        but the BIG-IP decides on  ${WARDEN_ADMIN_ROLE_ATTRIBUTE}, which does not"
-  echo "        reference that group — so membership in it grants nothing. That is normal in"
-  echo "        bundled mode (the seeded employeeType stamp decides). If you meant the group"
-  echo "        to be the deciding factor, set:"
-  echo "          WARDEN_ADMIN_ROLE_ATTRIBUTE=memberOf=${WARDEN_ADMIN_GROUP_DN}"
-  echo "        and confirm memberOf survives a default search — see docs/directory.md."
+  echo "        so membership in that group is not what grants Administrator — the attribute"
+  echo "        above is. That is a valid setup; it is only worth checking that it is the one"
+  echo "        you meant. Clear WARDEN_ADMIN_ROLE_ATTRIBUTE to let the group decide."
   echo
 }
 

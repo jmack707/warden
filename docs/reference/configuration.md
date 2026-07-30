@@ -22,8 +22,8 @@ consistent everywhere. Two rules make the rest of this page readable:
 |---|---|---|---|---|
 | `WARDEN_HOST_IP` | IPv4 | `<this-host-ip>` | yes | Docker host / OpenBao address; the bundled LDAPS cert SAN must match it |
 | `WARDEN_DIRECTORY_MODE` | enum `bundled`\|`external` | `bundled` | no | `bundled` runs Warden's own OpenLDAP; `external` uses your AD/LDAP and creates nothing in it ([directory.md](../directory.md)) |
-| `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | Names the admin group object: created in bundled mode, required to exist in external mode, and the source of the external default below. It grants nothing on its own — see the note under this table |
-| `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | bundled `employeeType=warden-admins`, external `memberOf=${WARDEN_ADMIN_GROUP_DN}` | no | **The rule that actually grants Administrator.** Pushed to the BIG-IP as `remote-role`, evaluated against the privileged account it authenticated |
+| `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | **The admin group: its members get Administrator, everyone else read-only.** Bundled creates it and adds the seeded privileged account; external expects it to exist and to contain your privileged accounts |
+| `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | derived from the group | no | _Advanced._ Overrides **how** membership is tested, for directories that cannot express it the derived way. Empty is correct unless the check below fails |
 | `WARDEN_LDAP_HOST` | host/IPv4 | `${WARDEN_HOST_IP}` | external only | Your directory address |
 | `WARDEN_LDAP_PORT` / `WARDEN_LDAPS_PORT` | int | `389` / `636` | no | APM AAA query port / LDAPS port |
 | `WARDEN_LDAP_SCHEMA` | enum `openldap`\|`ad` | `openldap` | no | `ad` resets `unicodePwd` and defaults the login attribute to `sAMAccountName` |
@@ -63,22 +63,24 @@ consistent everywhere. Two rules make the rest of this page readable:
 | `auth-pam-validate-ip` (sys httpd) | `off` | same, at the PAM layer — both units |
 | external `external-self`/`ext_float` `allow-service` | none (`[]`) | no TMUI/SSH on the external VLAN (ADR 0003 hardening) |
 
-### How the two admin settings relate
-`WARDEN_ADMIN_GROUP_DN` names a group; `WARDEN_ADMIN_ROLE_ATTRIBUTE` is the test the BIG-IP
-applies. Only the second grants anything, and the two are linked in exactly one case:
+### How the group becomes an entitlement
+You configure a group; the BIG-IP evaluates an attribute. Warden bridges the two, and the
+bridge differs by directory because the BIG-IP can only read what a **default** LDAP search
+returns for the account it authenticated:
 
-| Mode | What decides Administrator | Effect of changing `WARDEN_ADMIN_GROUP_DN` |
-|---|---|---|
-| `bundled` | the `employeeType=warden-admins` stamp Warden seeds on the privileged accounts | renames the seeded group; **does not change who is an administrator** |
-| `external` | `WARDEN_ADMIN_ROLE_ATTRIBUTE`, which defaults to `memberOf=<that group>` | changes the decision, unless you set `WARDEN_ADMIN_ROLE_ATTRIBUTE` explicitly |
+| Directory | How membership reaches the BIG-IP |
+|---|---|
+| Bundled OpenLDAP | `memberOf` there is *operational* — returned only when asked for by name, so the BIG-IP cannot see it. Warden therefore stamps the group's members with `employeeType=warden-admins` and maps on that. The group stays the source of truth |
+| Active Directory | `memberOf` is a stored attribute returned by default, so the group is read directly and no stamp exists |
+| 389DS / FreeIPA | depends on plugin and ACI configuration — `scripts/preflight-directory.sh` tests it |
 
-The BIG-IP searches `WARDEN_PRIV_SEARCH_BASE` and evaluates the **privileged account** it
-just bound — not the human identity entry in `WARDEN_USER_SEARCH_BASE`. So group membership
-has to be held by the privileged accounts. It must also survive a *default* LDAP search: an
-operational attribute such as `memberOf` from OpenLDAP's memberof overlay is invisible to
-the BIG-IP, and every user then silently lands read-only.
-`scripts/preflight-directory.sh` checks both conditions; [directory.md](../directory.md)
-explains the model.
+Two consequences worth knowing. The group must contain the **privileged accounts** the
+BIG-IP binds (`WARDEN_PRIV_SEARCH_BASE`), not the human identity entries in
+`WARDEN_USER_SEARCH_BASE`; they are different objects and only the former is evaluated.
+And if the bridge fails, it fails silently — everyone authenticates and lands read-only.
+`deploy.sh` now checks this in bundled mode and `preflight-directory.sh` in external mode,
+both probing as the BIG-IP's own read-only bind. Override
+`WARDEN_ADMIN_ROLE_ATTRIBUTE` only when that check tells you the derived rule cannot work.
 
 ## Key BIG-IP object names (partition `/Common`, prefix `warden-apm`)
 | Object | Name |
