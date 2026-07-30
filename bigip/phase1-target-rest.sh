@@ -4,7 +4,7 @@
 #
 # Requires env: BIGIP_MGMT, BIGIP_USER, BIGIP_PASS, BIND_PW, plus WARDEN_HOST_IP/BASE_DN
 # from .env. BIGIP_PASS is NOT stored in the repo — export it at run time (in the
-# Dakota lab it is sourced from the lab OpenBao at kv/bigip/common).
+# reference lab it is sourced from that lab's OpenBao).
 #
 # SAFETY: admin/root stay local on TMOS; flipping auth source to ldap cannot lock
 # them out. Keep a console open anyway (ssh root@192.168.99.6 'qm terminal 210').

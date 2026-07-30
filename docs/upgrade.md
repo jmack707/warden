@@ -2,23 +2,69 @@
 
 _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x._
 
-## Rebuilding the APM policy
-The APM build is idempotent and teardown-first, so an upgrade is a re-run:
-```bash
-# edit scripts, then re-run the build:
+## Supported paths
+There is no in-place version upgrade to perform: Warden is configuration, so "upgrading" means
+re-applying it from a newer revision of this repo. Three paths are supported:
 
-bash /root/warden/bigip/run-apm-build.sh
+| From | To | How |
+|---|---|---|
+| An older revision of this repo | `main` | `git pull`, then re-run `./deploy.sh` (or just `--bigip` / `--stack`) |
+| OpenBao dev mode | raft-persisted with auto-unseal | [the cutover runbook](operations/runbooks/openbao-cutover.md) |
+| Bundled OpenLDAP | your own AD/LDAP | set `WARDEN_DIRECTORY_MODE=external`, run `scripts/preflight-directory.sh`, then re-deploy ([directory.md](directory.md)) |
+
+Downgrading is the same operation against an older revision, with the rollback caveat below.
+
+## Pre-upgrade checks
+Confirm the current state is healthy before changing it, so a failure afterwards is
+unambiguous:
+
+```bash
+./scripts/validate-phase1.sh                  # credential core still green
+docker compose --profile bundled ps           # openbao + openldap Up
+./teardown.sh --all --dry-run                 # inventory of what is currently deployed
+git log --oneline -1                          # the revision you are coming from
 ```
-Verify with the matrix in [deploy.md](deploy.md#verification).
 
-### Rollback
-Re-running the build from the previous committed revision restores the prior policy (it
-tears down the mutable graph first). To back out entirely, delete the test VS and access
-profile:
+Note the CA fingerprint if operators hold browser certificates — a re-deploy reuses an
+existing CA, but confirming it lets you rule that out later:
+
 ```bash
-# via iControl REST as admin:
-curl -sk -u admin:<pw> -X DELETE https://<BIGIP_MGMT>/mgmt/tm/ltm/virtual/~Common~warden-apm-test-vs
-curl -sk -u admin:<pw> -X DELETE https://<BIGIP_MGMT>/mgmt/tm/apm/profile/access/~Common~warden-apm
+openssl x509 -in certs/ca.crt -noout -fingerprint -sha256
+```
+
+## Procedure
+The APM build is idempotent and teardown-first, so an upgrade is a re-run:
+
+```bash
+git pull                          # take the newer revision
+./deploy.sh                       # or --stack / --bigip for one half
+```
+
+## Verification
+```bash
+./scripts/validate-phase1.sh      # credential core, no BIG-IP
+cd clients && for u in alice.admin bob.user carol.expired; do
+  curl -sk --cert $u.crt --key $u.key -o /dev/null -w "$u %{http_code}\n" -L "https://${WARDEN_APM_VIP}/"
+done
+```
+
+Expected, unchanged from [deploy.md](deploy.md#verification): `alice.admin` and `bob.user`
+reach the webtop (`200`), `carol.expired` fails at the TLS handshake. If the CA fingerprint
+changed, browser certificates must be re-imported.
+
+## Rollback
+Re-running the build from the previous committed revision restores the prior policy, because
+it tears the mutable graph down first:
+
+```bash
+git checkout <previous-revision>
+./deploy.sh --bigip
+```
+
+To back the BIG-IP out entirely instead:
+
+```bash
+./teardown.sh --bigip --yes
 ```
 
 ## OpenBao dev → production cutover
@@ -28,7 +74,7 @@ the raft migration, init/unseal, reconfigure, and rollback to dev mode.
 
 ## Pending: OpenBao TLS on :8200 (not yet done)
 The OpenBao listener is HTTP on the internal VLAN. Enabling TLS cascades into:
-- the APM iRule sideband (`bigip/apm-openbao-fetch-dakota.irule`) — HTTP → HTTPS connect;
+- the APM iRule sideband (`bigip/apm-openbao-fetch-static.irule`) — HTTP → HTTPS connect;
 - `scripts/mint-apm-token.sh` and every `bao()` helper (`BAO_ADDR` scheme);
 - `.env` `BAO_ADDR`.
 Do all of these together in one change, then re-run the APM build so the data-group token

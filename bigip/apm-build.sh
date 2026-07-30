@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Phase 2 (decision core) — build the APM cert -> CN -> LDAP memberOf -> GROUP BRANCH
-# -> Allow/Deny policy on bigipa.dakota, plus a test VIP. This is the access-DECISION
+# -> Allow/Deny policy on the target BIG-IP, plus a test VIP. This is the access-DECISION
 # half of the Warden front door (no webtop/SSO/OpenBao-injection yet) — enough to test the
 # alice/bob/carol matrix with `curl --cert`.
 #
@@ -23,7 +23,9 @@ _PASS_IN="${BIGIP_PASS:-}"; set -a; . "${HERE}/../.env"; set +a
 [ -n "$_PASS_IN" ] && BIGIP_PASS="$_PASS_IN"
 : "${BIGIP_PASS:?export BIGIP_PASS}"; : "${BIND_PW:?need BIND_PW}"
 : "${APM_TOKEN:?export APM_TOKEN (scoped OpenBao token from scripts/mint-apm-token.sh)}"
-IRULE_FILE="${HERE}/apm-openbao-fetch-dakota.irule"
+# static-credential fetch: rotate the CN's password, read it back, stash it.
+# The -ephemeral variant is the leased-account alternative (ADR 0006), not wired in.
+IRULE_FILE="${HERE}/apm-openbao-fetch-static.irule"
 
 B="https://${BIGIP_MGMT}"; A=(-sk -u "${BIGIP_USER}:${BIGIP_PASS}")
 P=warden-apm                      # object-name prefix / access-profile name
@@ -41,7 +43,7 @@ VIP_IP="${WARDEN_APM_VIP:?set WARDEN_APM_VIP in .env}"
 # Portal resources target these non-routable façade IPs; plain LTM shadow VSs (TCP/TLS
 # passthrough, all VLANs so tmm's own portal-engine connection hits them) steer the last
 # hop with an iRule `node` (a pool CAN'T hold a self-IP member). Pattern proven on the
-# Nora build (bigip-apm-cert-ldap role, K31750304). Needs
+# reference build (K31750304). Needs
 # tmm.tcl.rule.node.allow_loopback_addresses=true (set below).
 SHADOW_A="${WARDEN_SHADOW_A:-192.0.2.5}"             # -> node 127.0.0.1 = THIS box's TMUI (active unit)
 SHADOW_B="${WARDEN_SHADOW_B:-192.0.2.6}"             # -> peer INTERNAL self-IP

@@ -5,6 +5,22 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 
 ## 2026-07-30
 ### Added
+- **Apache-2.0 [LICENSE](LICENSE)** — the repo described itself as OSS while shipping no
+  license, which legally meant all rights reserved.
+- **[SECURITY.md](SECURITY.md)** — private reporting route, plus an explicit list of what this
+  demo deliberately does not do (OpenBao dev mode, plaintext `:8200`, `BIGIP_PASS` in `.env`,
+  PoC-grade fetch iRule, local demo CA) separated from the properties that *are* load-bearing
+  and worth reporting as bugs if they regress.
+- **The documentation standard is now enforced in CI**: the linter is vendored at
+  `.github/scripts/doc_lint.py` (stdlib only, no network, so it works on air-gapped runners)
+  and runs on every pull request via `.github/workflows/docs-lint.yml`. `doc-standard.json` was
+  replaced with the canonical service preset — the hand-written manifest predated the linter
+  and could not be parsed by it.
+- README gained **Topology** (an ASCII data-path diagram) and **Components** sections;
+  `docs/architecture.md` gained **Context**, **Data flow**, **Constraints and non-goals** and a
+  **Decisions** index of the ADRs.
+
+### Fixed
 - [docs/manual-build.md](docs/manual-build.md) — a teaching walkthrough that builds the demo
   one layer at a time (trust anchor → directory → broker → identities → scoped token →
   BIG-IP auth → APM front door), each with what it is, why it exists and how to prove it

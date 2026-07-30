@@ -5,6 +5,14 @@ _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x, OpenLDAP (osixia) 1.5
 Placeholders below (`<...>`) are the values a customer sets in `.env`; the reference
 build used a Dakota lab. Design decisions are captured in [adr/](adr/).
 
+## Context
+BIG-IP management access is usually granted by handing an engineer a standing account, or by
+sharing `admin`. Both leave a credential in a human's hands indefinitely, and neither produces
+a per-session audit trail. Warden shows a different arrangement built only from off-the-shelf
+parts: the operator authenticates with a certificate, a broker holds and rotates the actual
+password, and the front door injects it. The point of the demo is that **no component in the
+credential path is custom code** — it is configuration of OpenBao, OpenLDAP and BIG-IP APM.
+
 ## Components
 | Component | Role |
 |---|---|
@@ -23,6 +31,25 @@ path (a second bookmark to the peer's TMUI).
 - **cn=bigip-admins,ou=groups** — the admin group.
 - `cn=bigip-bind,ou=svc` — the BIG-IP search/bind account (read ACL on ou=users, never
   reads `userPassword`).
+
+## Data flow
+The request path, and what crosses which boundary. The numbered steps are elaborated in the
+sections below and end-to-end in [manual-build.md](manual-build.md).
+
+```text
+1. operator ──TLS client cert──▶ APM virtual server        (cert validated against the Warden CA)
+2. APM: extract CN from the certificate subject            (session.custom.cn)
+3. APM ──LDAP query──▶ directory                           (does <login-attr>=<CN> exist?)
+4. APM ──iRule sideband, scoped token──▶ OpenBao           (rotate, then read static-cred)
+5. APM: stash username + password in session variables     (never rendered to the browser)
+6. APM ──form SSO──▶ target TMUI via Portal Access         (credential injected)
+7. target BIG-IP ──LDAPS bind──▶ directory                 (authenticates the injected account)
+8. target BIG-IP: remote-role evaluates the bound account  (administrator vs read-only)
+```
+
+Step 4 is the only place a secret moves, and it moves between two machines on the internal
+network — never through the operator's browser. Step 8 is where authorization is decided, on
+the device being administered rather than in the access policy.
 
 ## Request flow (browser → privileged TMUI)
 1. **Client cert** (Warden CA) at the APM VIP `<WARDEN_APM_VIP>` → APM extracts the CN.
@@ -82,9 +109,22 @@ ended by the operator on the box; lease revoke stops the *next* login.
   root can unseal. Accepted for the demo; production uses a managed seal / manual unseal.
 - **admin/root on the BIG-IP are local** — recovery if the directory or OpenBao is down.
 
-## Constraints
+## Constraints and non-goals
 - APM AAA LDAP requires an LTM **pool** on 21.x (a bare server address is rejected).
 - APM Portal Access refuses to proxy to any cluster-reserved address — targets must be
   non-reserved façade IPs ([ADR 0003](adr/0003-shadow-facade-portal-targets.md)).
 - OpenBao 2.x dev mode is in-memory (lost on container recreate); production uses raft
   ([ADR 0005](adr/0005-openbao-persisted-auto-unseal.md)).
+
+## Decisions
+The reasoning behind each structural choice lives in one ADR per decision, immutable once
+accepted:
+
+| ADR | Decision |
+|---|---|
+| [0001](adr/0001-hybrid-oss-warden-design.md) | Hybrid OSS design; no custom code in the credential path |
+| [0002](adr/0002-identity-privilege-split.md) | Split identity from privilege in the directory |
+| [0003](adr/0003-shadow-facade-portal-targets.md) | Shadow façade virtual servers as Portal Access targets |
+| [0004](adr/0004-authorization-on-bigip-remote-role.md) | Authorize on the BIG-IP `remote-role`, not in the APM policy |
+| [0005](adr/0005-openbao-persisted-auto-unseal.md) | Persist OpenBao (raft) with auto-unseal custody |
+| [0006](adr/0006-configurable-credential-model.md) | Configurable credential model: ephemeral vs static |

@@ -1,7 +1,7 @@
 # ADR 0005 — Persist OpenBao (raft) with AUTO-unseal custody
 
-- Status: Accepted
-- Date: 2026-07-27
+## Status
+Accepted — 2026-07-27.
 
 ## Context
 The PoC ran OpenBao in `-dev` mode: in-memory storage, fixed root token `root`,

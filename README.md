@@ -4,7 +4,7 @@ A self-contained demo of certificate-authenticated privileged access to BIG-IP m
 with a password the operator never sees and instant session termination — composed from
 OpenBao, OpenLDAP, and BIG-IP APM, with no custom code in the credential path.
 
-## What & why
+## What this is
 Warden gives operators time-boxed, audited access to BIG-IP management without handing out
 standing credentials — built entirely from open-source parts:
 
@@ -25,10 +25,45 @@ Already have a directory? Set `WARDEN_DIRECTORY_MODE=external` and Warden uses *
 LDAP** instead, creating nothing in it — you define which group grants BIG-IP admin
 (`WARDEN_ADMIN_GROUP_DN`). See [docs/directory.md](docs/directory.md).
 
-## Request flow (one line)
-client cert → APM extracts CN → LDAP identity check → OpenBao rotates + fetches the password
-→ webtop → SSO into the target's TMUI → the BIG-IP authorizes by remote-role (admin vs
-read-only).
+## Topology
+The operator never reaches the BIG-IP's management interface directly, and never holds a
+password. The front door is an APM virtual server; the broker and directory sit on a Docker
+host the BIG-IP can reach on `:636` (LDAPS) and `:8200` (OpenBao).
+
+```text
+  operator                    BIG-IP (APM)                  Docker host
+  ────────                    ────────────                  ───────────
+  browser  ──client cert──▶  <WARDEN_APM_VIP>:443
+   (.p12)                          │
+                                   ├── identity lookup ──▶  OpenLDAP  :389/:636
+                                   │   (CN from the cert)
+                                   ├── fetch credential ─▶  OpenBao   :8200
+                                   │   (scoped token, iRule sideband)
+                                   ▼
+                             webtop + form SSO
+                                   │
+                                   ▼
+                        target TMUI (reverse-proxied)
+                                   │
+                          binds the injected credential
+                                   ▼
+                             LDAPS ──▶ OpenLDAP, then remote-role
+                             decides admin vs read-only
+```
+
+In one line: client cert → APM extracts CN → LDAP identity check → OpenBao rotates and
+returns the password → webtop → SSO into the target's TMUI → the BIG-IP authorizes by
+remote-role. The operator sees a session, never a secret.
+
+## Components
+| Component | Runs where | Job |
+|---|---|---|
+| **OpenBao** | Docker, this host | Owns and rotates the privileged credential; issues it only to a narrowly-scoped token. The broker |
+| **OpenLDAP** | Docker, this host | The directory the BIG-IP validates against. Optional — point Warden at your own AD/LDAP instead ([docs/directory.md](docs/directory.md)) |
+| **BIG-IP APM** | your BIG-IP | The front door: client-certificate auth, identity lookup, credential injection, reverse-proxied TMUI with form SSO, session kill |
+| **BIG-IP LTM + `remote-role`** | your BIG-IP | Authorization. Everyone who authenticates gets read-only; only the admin group is elevated |
+
+Nothing in the credential path is custom code — it is configuration of off-the-shelf parts.
 
 ## Quickstart
 ```bash
@@ -39,7 +74,7 @@ cp .env.example .env      # fill in the <angle-bracket> values: host IP, domain,
 [docs/install.md](docs/install.md) (the OSS stack) and [docs/deploy.md](docs/deploy.md)
 (the BIG-IP).
 
-## Verify
+## Verification
 ```bash
 ./scripts/validate-phase1.sh                 # credential core, no BIG-IP
 docker ps --format '{{.Names}}: {{.Status}}' # openbao + openldap Up
@@ -82,4 +117,10 @@ selectable (`WARDEN_CRED_MODE`): `static` (inject a rotated password the user ne
 - OpenBao can run raft-persisted with auto-unseal
   ([ADR 0005](docs/adr/0005-openbao-persisted-auto-unseal.md)).
 
-See [CHANGELOG.md](CHANGELOG.md) for history.
+## License
+[Apache License 2.0](LICENSE). Warden composes OpenBao, OpenLDAP and BIG-IP APM; those carry
+their own licenses, and a licensed BIG-IP with APM provisioned is your responsibility to
+supply.
+
+See [CHANGELOG.md](CHANGELOG.md) for history, [CONTRIBUTING.md](CONTRIBUTING.md) to
+contribute, and [SECURITY.md](SECURITY.md) to report a vulnerability.

@@ -1,7 +1,7 @@
 # ADR 0003 — Shadow façade VSs for Portal Access targets
 
-- Status: Accepted
-- Date: 2026-07-27
+## Status
+Accepted — 2026-07-27.
 - Supersedes: the external-self-IP target from DEVIATIONS.md (10)
 
 ## Context

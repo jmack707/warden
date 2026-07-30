@@ -15,13 +15,14 @@ OpenLDAP (osixia) 1.5.0._
 - `openssl`, `ldap-utils`, `jq`, and `gettext` (`envsubst`) on the host.
 - REST reachability from this host to the BIG-IP management address on `443`.
 
-## One-command path
+## Procedure
+### One-command path
 ```bash
 cp .env.example .env      # fill in the <angle-bracket> values
 ./deploy.sh               # runs everything below, then the BIG-IP build
 ```
 
-## Stack only
+### Stack only
 `deploy.sh` takes the same three forms as `teardown.sh`, so the OSS core can be stood up
 without touching a BIG-IP (`BIGIP_*` need not be set):
 
@@ -30,7 +31,7 @@ without touching a BIG-IP (`BIGIP_*` need not be set):
 ./deploy.sh --bigip       # the BIG-IP half, once the stack is up
 ```
 
-## Manual path
+### Manual path
 To build the same thing step by step — with what each layer is for and how to prove it works
 before moving on — follow [manual-build.md](manual-build.md). It is the teaching version of
 `deploy.sh`, and you can hand back to the scripts at any point.
@@ -48,3 +49,16 @@ Expected: `validate-phase1.sh` ends green (exit 0) — a credential is minted, a
 OpenLDAP, and its revoke deletes the entry; `openbao` and `openldap` both `Up`. If it exits
 non-zero, stop and see [operations/troubleshooting.md](operations/troubleshooting.md) before
 touching the BIG-IP.
+
+## Uninstall
+`teardown.sh` removes the stack. Volumes (and therefore the directory's data) survive unless
+you pass `--purge`:
+
+```bash
+./teardown.sh --stack --dry-run    # what would be removed; changes nothing
+./teardown.sh --stack --yes        # containers + network; volumes and certs kept
+./teardown.sh --stack --purge --yes  # also drops the volumes, the CA and issued certificates
+```
+
+To remove the BIG-IP configuration as well, use `--all` — the ordering and safety properties
+are described in [upgrade.md](upgrade.md#teardown).

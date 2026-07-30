@@ -4,11 +4,26 @@ End a principal's access: invalidate future logins and cut a live TMUI session.
 
 _Last validated: 2026-07 against TMOS 21.1.0, OpenBao 2.x._
 
-## When to run
+## When to use this
 A credential is suspected compromised, a session must end now, or an access grant is being
 withdrawn. Rotate/revoke ends *future* logins; a live APM/TMUI session is cut by the APM
 step. (An already-established SSH session is ended by the operator on the box — the BIG-IP
 has no remote "kill SSH session"; rotation stops the next login.)
+
+## Prerequisites
+- Shell access on the Docker host, run from the repo root: `revoke-all.sh` reads `.env` and
+  reaches OpenBao through `docker exec openbao`, so the `openbao` container must be up and
+  unsealed. `python3` is required — the script uses it to build the REST payload and parse the
+  response.
+- `.env` populated with `BAO_TOKEN` and `BIGIP_MGMT`/`BIGIP_USER`, plus REST reachability to
+  the target BIG-IP on `443`. `BIGIP_PASS` must be readable from `.env` **or** injected in the
+  environment; the script asserts it before the APM cut and an injected value wins over the
+  `.env` one, so a production password never has to be written to disk.
+- The principal's CN as OpenBao and APM know it — the static-role name and the client-cert CN
+  are the same string. For a targeted cut you also need the APM session key, or the lease ID
+  for an ephemeral credential.
+- For the log-side verification, shell or console access on the target BIG-IP to read
+  `/var/log/secure`.
 
 ## Procedure
 Run on the Docker host (reads `BIGIP_PASS` from `.env`, or inject it):
@@ -41,6 +56,14 @@ password fails.
 Revocation is intentional and not reversible per se. To restore access for `<CN>`, re-issue
 normally: the next portal login rotates and injects a fresh credential (static mode), or run
 `./scripts/issue-cred.sh` (ephemeral). No manual cleanup is required.
+
+```bash
+# ephemeral model — mint a fresh leased credential now
+./scripts/issue-cred.sh
+# static model — nothing to run; confirm the role is still there so the next login can rotate
+docker exec -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN=$(grep ^BAO_TOKEN .env|cut -d= -f2) \
+  openbao bao list ldap/static-role
+```
 
 ## Escalation
 If a cut reports failure (non-zero HTTP), capture the script output and check the relevant

@@ -1,7 +1,7 @@
 # ADR 0004 — Authorize on the BIG-IP remote-role, not in the APM policy
 
-- Status: Accepted
-- Date: 2026-07-27
+## Status
+Accepted — 2026-07-27.
 
 ## Context
 Originally APM gated access on group membership by folding it into the LDAP query filter
