@@ -1,2 +1,0 @@
-dn: uid={{.Username}},ou=users,dc=warden,dc=lab
-changetype: delete

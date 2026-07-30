@@ -5,14 +5,37 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 
 ## 2026-07-29
 ### Added
+- **Bring your own directory.** `WARDEN_DIRECTORY_MODE=external` points Warden at an
+  existing AD / FreeIPA / LDAP instead of the bundled OpenLDAP, and it creates nothing
+  there. Identity, privileged-account and admin-group subtrees are separately configurable;
+  `WARDEN_LDAP_SCHEMA=ad` switches password resets to `unicodePwd` and login to
+  `sAMAccountName`. New `scripts/preflight-directory.sh` validates the LDAPS chain, both
+  binds, the group and the subtrees read-only before anything on the BIG-IP is touched, and
+  `deploy.sh` refuses to continue if it fails. Guide: [docs/directory.md](docs/directory.md).
+- **The BIG-IP admin group is now configuration**, not a constant: `WARDEN_ADMIN_GROUP_DN`
+  plus `WARDEN_ADMIN_ROLE_ATTRIBUTE` (defaults preserve the seeded `employeeType` mapping in
+  bundled mode, and use real `memberOf` membership in external mode).
+- **`./teardown.sh`** — removes the BIG-IP configuration and/or the local stack in reverse
+  dependency order, with `--dry-run`, `--purge` and a confirmation prompt. Flips the auth
+  source back to local *before* deleting the LDAP config, restores `remote-user` to
+  `no-access`, and never touches an external directory. The object list is shared with
+  `apm-build.sh` (`bigip/lib/objects.sh`) so build and teardown cannot drift.
+- `scripts/gen-client-certs.sh` issues Warden-CA client certs for arbitrary principals
+  (external mode, where Warden does not seed users).
 - `scripts/renew-apm-token.sh` + cron guidance in [docs/deploy.md](docs/deploy.md): the
   APM fetch token is periodic (768h) and previously expired silently after 32 days,
   breaking SSO injection with no visible error until login.
 
 ### Fixed
+- `deploy.sh` re-runs no longer mint a new CA. `gen-certs.sh` reused an existing
+  `certs/ca.{crt,key}` — the previous behavior silently invalidated every issued client cert
+  and browser import on the "just re-run it" path. `WARDEN_REGEN_CA=1` rolls it deliberately.
 - First-run `deploy.sh` failed at step 5: the openldap container chowns `certs/` when the
   stack comes up (between `gen-certs.sh` and the client-cert signing). The reclaim logic
   moved to `scripts/lib/certs.sh` and now runs before signing in `gen-test-users.sh` too.
+- Removed the remaining hardcoded directory/site values: the seed and OpenBao LDIFs no
+  longer bake in `dc=warden,dc=lab` (they are templated per `.env`, so changing `BASE_DN`
+  works), and the bundled compose reads `WARDEN_DOMAIN`.
 - Removed the remaining hardcoded site-specific values: `apm-build.sh` no longer falls
   back to a hardcoded VIP (`WARDEN_APM_VIP` is required), `import-browser-certs.sh` takes
   `WARDEN_VM` (required) + `WARDEN_REMOTE_DIR` (default `/opt/warden`), and the reference

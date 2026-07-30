@@ -17,3 +17,8 @@ certs/ldap.crt
 *.log
 initdb.sql
 openbao/.openbao-keys.json
+
+# rendered from openbao/*.ldif.tmpl by scripts/configure-openbao.sh
+openbao/creation.ldif
+openbao/deletion.ldif
+openbao/rollback.ldif

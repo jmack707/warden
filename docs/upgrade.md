@@ -35,15 +35,41 @@ Do all of these together in one change, then re-run the APM build so the data-gr
 path still resolves. Until then, the internal VLAN is the control.
 
 ## Teardown
+`./teardown.sh` removes what `deploy.sh` created, in reverse dependency order:
+
 ```bash
-cd /root/warden
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down   # stop stack
-# to also drop persisted state (IRREVERSIBLE): add -v to remove the raft/ldap volumes
+./teardown.sh --all --dry-run     # print exactly what would be removed, change nothing
+./teardown.sh --all               # BIG-IP config + local stack (prompts to confirm)
+./teardown.sh --bigip --yes       # BIG-IP only — leave the stack running
+./teardown.sh --stack --yes       # stack only — leave the BIG-IP configured
+./teardown.sh --all --purge --yes # also drop volumes, the CA, and issued client certs
 ```
-On the BIG-IP, revoke any live sessions first with
-[operations/runbooks/revoke-session.md](operations/runbooks/revoke-session.md), then delete
-the APM/LTM objects as in Rollback above. `admin`/`root` and the local auth source are left
-intact.
+
+Order is deliberate: the auth source flips back to **local** before the LDAP config is
+deleted, so remote auth is never pointed at a half-removed configuration. `admin`/`root`
+stay local throughout, so teardown cannot lock you out. `remote-user defaultRole` is
+restored to `no-access` (Warden sets `guest`), so re-pointing auth later cannot silently
+grant access.
+
+What it deliberately leaves alone:
+- the BIG-IP's local accounts, licence and provisioning;
+- **an external directory** — Warden creates nothing in yours, so nothing is deleted there.
+  It does remove the OpenBao static roles, which leaves those privileged accounts holding a
+  password nobody knows: reset them in your directory afterwards
+  ([directory.md](directory.md));
+- without `--purge`: the Docker volumes and the CA, so `./deploy.sh` brings the same
+  environment straight back. With `--purge` a re-deploy mints a **new CA**, so browser
+  client certs must be re-imported.
+
+Revoke live sessions first if operators are connected —
+[operations/runbooks/revoke-session.md](operations/runbooks/revoke-session.md).
+
+### Verification
+```bash
+./teardown.sh --all --dry-run     # after a teardown: every line should 404 / be absent
+curl -sk -u admin:<pw> https://<BIGIP_MGMT>/mgmt/tm/auth/source | jq -r .type   # local
+docker ps --format '{{.Names}}'                                                 # no openbao/openldap
+```
 
 ### Verification
 ```bash

@@ -4,7 +4,7 @@
 # bob.user carries NO employeeType, so he falls through to the BIG-IP default role (guest,
 # read-only). alice.admin (employeeType=warden-admins, in ldap/warden-users.ldif) stays admin.
 # OpenBao owns/rotates this userPassword (scripts/configure-openbao-static.sh bob.user).
-dn: uid=bob.user,ou=users,dc=warden,dc=lab
+dn: uid=bob.user,${WARDEN_PRIV_SEARCH_BASE}
 objectClass: inetOrgPerson
 uid: bob.user
 cn: bob.user

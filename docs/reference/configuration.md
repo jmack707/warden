@@ -9,7 +9,21 @@ _Last validated: 2026-07._
 ## `.env` (copy from `.env.example`, gitignored)
 | Variable | Type | Example | Required | Effect |
 |---|---|---|---|---|
-| `WARDEN_HOST_IP` | IPv4 | `<this-host-ip>` | yes | Docker host / OpenBao+LDAP address; the LDAPS cert SAN must match it |
+| `WARDEN_HOST_IP` | IPv4 | `<this-host-ip>` | yes | Docker host / OpenBao address; the bundled LDAPS cert SAN must match it |
+| `WARDEN_DIRECTORY_MODE` | enum `bundled`\|`external` | `bundled` | no | `bundled` runs Warden's own OpenLDAP; `external` uses your AD/LDAP and creates nothing in it ([directory.md](../directory.md)) |
+| `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | **The BIG-IP admin group** — its members get Administrator; everyone else read-only |
+| `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | bundled `employeeType=warden-admins`, external `memberOf=${WARDEN_ADMIN_GROUP_DN}` | no | What the BIG-IP remote-role matches to grant Administrator |
+| `WARDEN_LDAP_HOST` | host/IPv4 | `${WARDEN_HOST_IP}` | external only | Your directory address |
+| `WARDEN_LDAP_PORT` / `WARDEN_LDAPS_PORT` | int | `389` / `636` | no | APM AAA query port / LDAPS port |
+| `WARDEN_LDAP_SCHEMA` | enum `openldap`\|`ad` | `openldap` | no | `ad` resets `unicodePwd` and defaults the login attribute to `sAMAccountName` |
+| `WARDEN_LDAP_CA_FILE` | path | bundled `certs/ca.crt` | external only | PEM of the CA that issued your LDAPS cert |
+| `WARDEN_BIND_DN` | LDAP DN | `cn=bigip-bind,ou=svc,${BASE_DN}` | no | Read-only search bind the BIG-IP uses |
+| `WARDEN_USER_SEARCH_BASE` | LDAP DN | `ou=people,${BASE_DN}` | no | Identity subtree (read-only) |
+| `WARDEN_PRIV_SEARCH_BASE` | LDAP DN | `ou=users,${BASE_DN}` | no | Privileged accounts **whose passwords OpenBao rotates** — use a dedicated OU |
+| `WARDEN_DIR_ADMIN_DN` / `_PW` | DN + string | bundled `cn=admin,${BASE_DN}` + `LDAP_ADMIN_PW` | external only | Account allowed to reset passwords on the privileged subtree |
+| `WARDEN_LOGIN_ATTR` | string | `uid` (`sAMAccountName` when `ad`) | no | Attribute the cert CN is matched against |
+| `WARDEN_PRIV_DN_ATTR` | string | `uid` (`cn` when `ad`) | no | RDN attribute of privileged-account DNs |
+| `WARDEN_PRINCIPALS` | string list | _(none)_ | external only | CNs to issue client certs + static roles for |
 | `BIGIP_MGMT` | IPv4 | `<bigip-a-mgmt-ip>` | yes | Target BIG-IP (bigipa) REST/management address |
 | `BIGIP_USER` | string | `admin` | yes | BIG-IP account for `[AGENT-IF-ACCESS]` REST calls |
 | `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — for the demo set it here; production: inject from a secret manager (wrappers preserve an injected value across the `.env` source) |

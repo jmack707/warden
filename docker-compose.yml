@@ -13,13 +13,18 @@ services:
       - ./openbao:/warden:ro                    # config LDIFs/policy for `bao write ...=@file` (NOT /openbao — reserved by the image)
 
   openldap:
+    # Only starts with the `bundled` profile (WARDEN_DIRECTORY_MODE=bundled, the default).
+    # In external mode Warden talks to your AD/LDAP instead and this never runs:
+    #   docker compose --profile bundled up -d   # bundled
+    #   docker compose up -d                     # external — openbao only
+    profiles: ["bundled"]
     image: osixia/openldap:1.5.0
     container_name: openldap
-    hostname: openldap.warden.lab
+    hostname: openldap.${WARDEN_DOMAIN:-warden.lab}
     ports: ["389:389", "636:636"]
     environment:
-      LDAP_ORGANISATION: "Warden Lab"
-      LDAP_DOMAIN: "warden.lab"
+      LDAP_ORGANISATION: "${WARDEN_ORG:-Warden Lab}"
+      LDAP_DOMAIN: "${WARDEN_DOMAIN:-warden.lab}"
       LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PW}"
       LDAP_TLS: "true"
       LDAP_TLS_CRT_FILENAME: "ldap.crt"
