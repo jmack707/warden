@@ -5,6 +5,18 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
 
 ## 2026-07-30
 ### Added
+- **The admin mapping is now verified by the tooling, not just documented**
+  (`scripts/lib/authz.sh`). The failure it catches is silent: the BIG-IP evaluates
+  `remote-role` only against attributes a *default* LDAP search returns, so an operational
+  `memberOf` (OpenLDAP's memberof overlay) leaves every operator authenticating successfully
+  and landing read-only, with nothing logged as wrong. `deploy.sh` now runs the check in
+  bundled mode against the seeded directory — warning and continuing — and
+  `preflight-directory.sh` uses the same implementation in external mode, where it stays
+  fatal. Both probe as the BIG-IP's own read-only bind, so an ACL hiding the attribute from
+  that account is caught as well.
+- `deploy.sh` also points out an admin group that is configured but plays no part in the
+  decision — the normal state in bundled mode, and a common misconfiguration in external
+  mode.
 - **Apache-2.0 [LICENSE](LICENSE)** — the repo described itself as OSS while shipping no
   license, which legally meant all rights reserved.
 - **[SECURITY.md](SECURITY.md)** — private reporting route, plus an explicit list of what this
