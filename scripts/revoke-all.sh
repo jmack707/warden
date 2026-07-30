@@ -18,7 +18,7 @@
 # Needs .env: BAO_TOKEN, BIGIP_MGMT/USER/PASS. Runs where OpenBao + the target are reachable.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# preserve a runtime-injected BIGIP_PASS (the Nora wrapper pipes it in) across the .env
+# preserve a runtime-injected BIGIP_PASS (a calling wrapper may pipe it in) across the .env
 # source — .env ships BIGIP_PASS empty on purpose (the admin secret isn't stored on the VM).
 _PASS_IN="${BIGIP_PASS:-}"
 set -a; . "${HERE}/../.env"; set +a

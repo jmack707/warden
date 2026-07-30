@@ -1,3 +1,13 @@
+# APM iRule Event handler for the OpenBao credential fetch (static credential model).
+# The per-session policy fires an 'iRule Event' agent with id `openbao_fetch`; this
+# rotates the CN's privileged password, reads it back, and stashes it in a session
+# variable for the form-SSO agent to inject. ${WARDEN_HOST_IP} is rendered at upload
+# time by apm-build.sh; the scoped token comes from the warden_openbao_dg data group.
+#
+# PoC-grade: plaintext sideband to OpenBao with regex JSON extraction. For production,
+# move to iRulesLX (real JSON parsing), enable TLS on OpenBao with a pinned CA, and hold
+# the token in an APM system variable rather than a data group.
+#-----------------------------------------------------------------------------
 when ACCESS_POLICY_AGENT_EVENT {
     if { [ACCESS::policy agent_id] eq "openbao_fetch" } {
         set cn [ACCESS::session data get session.custom.cn]

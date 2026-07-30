@@ -6,6 +6,21 @@ root. Scripts that touch the BIG-IP need `BIGIP_PASS` injected at runtime (never
 
 _Last validated: 2026-07._
 
+## Overview
+Two top-level commands do everything; the rest are the individual steps they call, useful on
+their own when you are building by hand ([manual-build.md](../manual-build.md)) or fixing one
+layer.
+
+| Command | Purpose |
+|---|---|
+| `./deploy.sh [--stack\|--bigip\|--all]` | Stand up the demo. Default `--all`; `--stack` skips the BIG-IP entirely (and stops requiring `BIGIP_*`); `--bigip` configures a BIG-IP against a stack that is already up |
+| `./teardown.sh [--stack\|--bigip\|--all] [--purge] [--dry-run] [--yes]` | Remove what `deploy.sh` created, in reverse dependency order. `--dry-run` prints and changes nothing; `--purge` also drops volumes, the CA and issued certificates; `--yes` skips the confirmation prompt |
+
+Both are idempotent and safe to re-run. Every script reads `.env` from the repo root, and
+those that touch the BIG-IP accept `BIGIP_PASS` injected from the environment so the admin
+secret need not be stored on disk. Exit codes follow the shell convention: `0` success,
+non-zero failure, and `2` specifically means bad invocation (unknown flag, missing argument).
+
 ## Phase 1 — credential core (run on the VM)
 | Script | Args | Purpose |
 |---|---|---|
@@ -16,6 +31,8 @@ _Last validated: 2026-07._
 | `scripts/revoke-cred.sh` | `<handle>` | Revoke by the handle from `issue-cred.sh`: a lease id → delete the ephemeral account; a CN → rotate the static password |
 | `scripts/lib/cred.sh` | _(sourced)_ | Shared credential abstraction: `cred_issue`/`cred_revoke` over both models (ADR 0006). Not run directly |
 | `scripts/validate-phase1.sh` | — | GATE 1A — end-to-end local validation, no BIG-IP |
+| `scripts/gen-client-certs.sh` | `<CN> [CN ...]` | Issue Warden-CA client certs + `.p12` bundles for arbitrary principals. Used in external-directory mode, where Warden seeds no users. Writes nothing to the directory |
+| `scripts/preflight-directory.sh` | — | Read-only validation of an EXTERNAL directory before the BIG-IP is touched: LDAPS chain, both binds, admin group, subtrees, and that the role attribute is returned by a default search. Exit `0` = safe to deploy |
 
 ## Phase 2 — injection, static roles, tokens (run on the VM)
 | Script | Args | Purpose |
@@ -23,7 +40,14 @@ _Last validated: 2026-07._
 | `scripts/configure-openbao-static.sh` | `[CN ...]` (default `alice.admin`) | Create/rotate OpenBao static roles for privileged access accounts |
 | `scripts/configure-openbao-phase2.sh` | — | Create the scoped `warden-apm-read` policy + mint the APM token |
 | `scripts/mint-apm-token.sh` | — | Mint a fresh scoped OpenBao token (used by the APM build) |
+| `scripts/renew-apm-token.sh` | — | Renew the periodic token the fetch iRule uses, reading the live value from the BIG-IP datagroup. Run daily from cron — the token dies silently otherwise ([deploy.md](../deploy.md#keep-the-apm-token-alive)) |
 | `scripts/import-browser-certs.sh` | — | Operator helper: import test client certs into a browser (p12 pass `warden`) |
+
+## Lifecycle
+| Script | Args | Purpose |
+|---|---|---|
+| `deploy.sh` | `[--stack\|--bigip\|--all]`, `--help` | Orchestrates everything below in order; see Overview |
+| `teardown.sh` | `[--stack\|--bigip\|--all] [--purge] [--dry-run] [--yes]`, `--help` | Reverses it. Flips `auth source` back to local BEFORE deleting the LDAP config, restores `remote-user` to `no-access`, and never modifies an external directory |
 
 ## Session termination
 | Script | Args | Purpose |

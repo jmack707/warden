@@ -4,11 +4,33 @@ Migrate OpenBao from `-dev` (in-memory) to raft-persisted with a real seal lifec
 
 _Last validated: 2026-07 against OpenBao 2.x. Cutover executed 2026-07-27 (AUTO-unseal)._
 
-## When to run
+## When to use this
 Once, to move past the PoC. After this, container recreate no longer wipes state. Context
 and rationale: [ADR 0005](../../adr/0005-openbao-persisted-auto-unseal.md).
 
-## Procedure (~5 min downtime for the Warden flow)
+## Prerequisites
+- A working dev-mode deployment ([../../install.md](../../install.md)): `openbao` and
+  `openldap` are `Up` and `./scripts/validate-phase1.sh` is green. The LDAP secrets engine is
+  rebuilt against the running directory, so OpenLDAP must stay up throughout.
+- Run from the repo root on the Docker host, with `docker` and the Compose **v2 plugin** — the
+  procedure layers `docker-compose.prod.yml` over `docker-compose.yml`, which the standalone
+  v1 binary cannot do the same way. `python3` and `jq` are needed by the scripts involved.
+- Root/sudo on that host: `openbao-init-unseal.sh` chowns the `warden_openbaodata` /
+  `warden_openbaologs` volumes to uid 100 / gid 1000 (a root-owned fresh volume makes the
+  server crash-loop on `vault.db: permission denied`), and the auto-unseal step installs a
+  unit into `/etc/systemd/system`.
+- `.env` present and writable — `openbao-init-unseal.sh` rewrites `BAO_TOKEN` in place with
+  the generated root token, and `bigip/run-apm-build.sh` needs `BIGIP_MGMT`/`BIGIP_USER` plus
+  `BIGIP_PASS` (in `.env` or injected) with REST reachability to the target BIG-IP.
+- A decision on key custody before you init: AUTO keeps `openbao/.openbao-keys.json` (0600,
+  gitignored) on the VM so the stack self-unseals after a reboot; MANUAL means copying the
+  keys off the VM and unsealing by hand after every restart. Either way the file is the only
+  copy of the unseal keys.
+- A maintenance window: expect roughly 5 minutes of downtime for the Warden flow, and accept
+  that the dev-mode in-memory state is discarded (it is disposable by design).
+
+## Procedure
+Expect ~5 min downtime for the Warden flow.
 ```bash
 cd <repo-root>
 # 1. recreate openbao with the persisted prod config (dev in-memory state is disposable)

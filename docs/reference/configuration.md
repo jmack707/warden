@@ -1,10 +1,21 @@
 # Configuration reference
 
 Every setting that governs the stack: `.env` variables, the sys `db`/httpd knobs the build
-sets on the BIG-IP, and the key BIG-IP object names. Site-specific values use the
-`<placeholder>` form.
+sets on the BIG-IP, and the key BIG-IP object names. Site-specific values use the angle-bracket form, e.g. `<bigip-mgmt-ip>`.
 
 _Last validated: 2026-07._
+
+## Overview
+`.env` is the only file you edit. Everything else — DNs, ports, trust anchors, the BIG-IP
+object names — is derived from it by `scripts/lib/directory.sh`, so a value set once is
+consistent everywhere. Two rules make the rest of this page readable:
+
+- **Required** means `deploy.sh` refuses to run without it. Which values are required depends
+  on mode: `--stack` does not need any `BIGIP_*`, and `WARDEN_DIRECTORY_MODE=external` needs
+  the external-directory block instead of `LDAP_ADMIN_PW`/`TEST_USER_PW`.
+- **Empty is meaningful** for a few keys: an empty `WARDEN_BIGIP_B_MGMT` selects the single
+  standalone BIG-IP path rather than the HA pair, and an empty `BIGIP_PASS` means "inject it
+  from the environment at run time" (the production pattern).
 
 ## `.env` (copy from `.env.example`, gitignored)
 | Variable | Type | Example | Required | Effect |
@@ -28,12 +39,19 @@ _Last validated: 2026-07._
 | `BIGIP_USER` | string | `admin` | yes | BIG-IP account for `[AGENT-IF-ACCESS]` REST calls |
 | `BIGIP_PASS` | string | _(empty)_ | at runtime | BIG-IP admin password. **Never stored** — for the demo set it here; production: inject from a secret manager (wrappers preserve an injected value across the `.env` source) |
 | `BASE_DN` | LDAP DN | `dc=warden,dc=lab` | yes | Directory base DN |
-| `LDAP_ADMIN_PW` | string | `AdminPw1!` | yes | OpenLDAP `cn=admin` password (lab only — rotate if shared) |
-| `BIND_PW` | string | `BindPw1!` | yes | `cn=bigip-bind` read-only bind password |
+| `LDAP_ADMIN_PW` | string | `<change-me>` | yes | OpenLDAP `cn=admin` password (lab only — rotate if shared) |
+| `BIND_PW` | string | `<change-me>` | yes | `cn=bigip-bind` read-only bind password |
 | `BAO_ADDR` | URL | `http://<this-host-ip>:8200` | yes | OpenBao API address |
 | `BAO_TOKEN` | string | `root` (dev) / generated (prod) | yes | OpenBao token; production value is written by `openbao-init-unseal.sh` |
-| `TEST_USER_PW` | string | `TestUser1!` | for test users | Password for the alice/bob/carol test principals (lab only) |
+| `TEST_USER_PW` | string | `<change-me>` | for test users | Password for the alice/bob/carol test principals (lab only) |
 | `WARDEN_CRED_MODE` | enum `ephemeral`\|`static` | `ephemeral` | no | Credential model for the operator/issue path (ADR 0006). `ephemeral` = throwaway leased account; `static` = rotate a standing account. Inline override wins over `.env` |
+| `WARDEN_DOMAIN` | DNS domain | `warden.lab` | yes | Bundled directory's domain. Drives the OpenLDAP container's suffix and the LDAPS certificate CN/SAN, so it must correspond to `BASE_DN` |
+| `WARDEN_DIR_ADMIN_PW` | string | bundled: `LDAP_ADMIN_PW` | external only | Password for `WARDEN_DIR_ADMIN_DN` — the account OpenBao binds as to reset privileged-account passwords |
+| `WARDEN_BIGIP_B_MGMT` | IPv4 | _(empty)_ | no | HA peer's management address. **Empty selects the single-BIG-IP path**; setting it adds the peer's TMUI as a second webtop bookmark |
+| `WARDEN_BIGIP_B_TMUI` | IPv4 | _(empty)_ | with peer | The peer's internal self-IP that APM proxies to for its TMUI. Required whenever `WARDEN_BIGIP_B_MGMT` is set |
+| `WARDEN_SHADOW_A` | IPv4 | `192.0.2.5` | no | RFC 5737 TEST-NET façade for unit A's TMUI. Non-routable on purpose — APM rejects reserved addresses as portal targets, so an iRule steers the real last hop ([ADR 0003](../adr/0003-shadow-facade-portal-targets.md)). Keep as-is unless it collides |
+| `WARDEN_SHADOW_B` | IPv4 | `192.0.2.6` | no | Façade for unit B's TMUI; used only when the HA peer is set |
+| `WARDEN_P12_PASS` | string | `warden` | no | Export password for the browser client-certificate bundles (`clients/*.p12`) |
 | `WARDEN_EPHEMERAL_ROLE` | string | `warden-admin` | no | OpenBao `ldap/creds/<role>` used in `ephemeral` mode |
 
 ## BIG-IP sys db / httpd knobs (set by the build)

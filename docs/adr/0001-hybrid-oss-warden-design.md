@@ -1,7 +1,7 @@
 # ADR 0001 — Hybrid OSS design for privileged access, no custom credential-path code
 
-- Status: Accepted
-- Date: 2026-07-10
+## Status
+Accepted — 2026-07-10.
 
 ## Context
 We need open-source privileged access for BIG-IP: certificate-based authentication, a

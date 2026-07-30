@@ -1,7 +1,7 @@
 # ADR 0002 — Split identity from privilege in the directory
 
-- Status: Accepted
-- Date: 2026-07-23
+## Status
+Accepted — 2026-07-23.
 
 ## Context
 A user's cert proves *who they are*; the credential injected into a target grants *what

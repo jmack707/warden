@@ -1,7 +1,7 @@
 # ADR 0006 — Configurable credential model (ephemeral vs static)
 
-- Status: Accepted
-- Date: 2026-07-28
+## Status
+Accepted — 2026-07-28.
 
 ## Context
 The repo delivers credentials two ways: **leased ephemeral** (OpenBao mints a throwaway
