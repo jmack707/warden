@@ -3,6 +3,20 @@
 Notable changes to Warden. Dates are absolute. Engineering notes are in
 [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
+## 2026-07-30
+### Added
+- [docs/manual-build.md](docs/manual-build.md) — a teaching walkthrough that builds the demo
+  one layer at a time (trust anchor → directory → broker → identities → scoped token →
+  BIG-IP auth → APM front door), each with what it is, why it exists and how to prove it
+  works. The BIG-IP halves are explained as object inventories rather than hand-translated
+  REST, and there is a symptom→cause table for the failures that actually happen.
+
+### Fixed
+- `docs/install.md`'s manual path said `docker compose up -d`, which after the `bundled`
+  profile landed starts OpenBao **without** OpenLDAP; it also used pre-templating DNs. It now
+  documents `deploy.sh --stack/--bigip` and points at the manual-build walkthrough, so there
+  is one copy of those commands instead of two that drift.
+
 ## 2026-07-29
 ### Added
 - **Bring your own directory.** `WARDEN_DIRECTORY_MODE=external` points Warden at an

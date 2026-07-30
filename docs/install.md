@@ -21,17 +21,19 @@ cp .env.example .env      # fill in the <angle-bracket> values
 ./deploy.sh               # runs everything below, then the BIG-IP build
 ```
 
-## Manual path (what deploy.sh does, stack only)
+## Stack only
+`deploy.sh` takes the same three forms as `teardown.sh`, so the OSS core can be stood up
+without touching a BIG-IP (`BIGIP_*` need not be set):
+
 ```bash
-cp .env.example .env      # edit WARDEN_HOST_IP, WARDEN_DOMAIN/BASE_DN, LDAP_ADMIN_PW, BIND_PW
-./scripts/gen-certs.sh    # CA + LDAPS server cert; SAN is built from WARDEN_HOST_IP
-docker compose up -d      # OpenBao + OpenLDAP
-source .env
-envsubst < ldap/seed.ldif | ldapadd -x -H "ldap://${WARDEN_HOST_IP}" \
-  -D "cn=admin,${BASE_DN}" -w "${LDAP_ADMIN_PW}"                 # seed the directory
-docker exec -i openldap ldapmodify -Y EXTERNAL -H ldapi:/// < ldap/acl-bigip-bind.ldif
-./scripts/configure-openbao.sh    # LDAP secrets engine + audit device
+./deploy.sh --stack       # certs, containers, directory, OpenBao
+./deploy.sh --bigip       # the BIG-IP half, once the stack is up
 ```
+
+## Manual path
+To build the same thing step by step — with what each layer is for and how to prove it works
+before moving on — follow [manual-build.md](manual-build.md). It is the teaching version of
+`deploy.sh`, and you can hand back to the scripts at any point.
 
 > To run OpenBao raft-persisted instead of dev mode, do the cutover in
 > [operations/runbooks/openbao-cutover.md](operations/runbooks/openbao-cutover.md) after
