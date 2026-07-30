@@ -74,6 +74,11 @@ fi
 export WARDEN_PRIV_DN_ATTR
 
 # ─── the BIG-IP admin group ──────────────────────────────────────────────────
+# Remember what the operator actually set, before defaulting, so the deploy can point out
+# a group that is configured but plays no part in the decision (see lib/authz.sh).
+WARDEN_ADMIN_GROUP_DN_EXPLICIT=0; [ -n "${WARDEN_ADMIN_GROUP_DN:-}" ] && WARDEN_ADMIN_GROUP_DN_EXPLICIT=1
+WARDEN_ADMIN_ROLE_ATTRIBUTE_EXPLICIT=0; [ -n "${WARDEN_ADMIN_ROLE_ATTRIBUTE:-}" ] && WARDEN_ADMIN_ROLE_ATTRIBUTE_EXPLICIT=1
+export WARDEN_ADMIN_GROUP_DN_EXPLICIT WARDEN_ADMIN_ROLE_ATTRIBUTE_EXPLICIT
 # The group whose members get Administrator on the target BIG-IP. Everyone else who
 # authenticates lands on the default role (guest / read-only).
 WARDEN_ADMIN_GROUP_DN="${WARDEN_ADMIN_GROUP_DN:-cn=bigip-admins,ou=groups,${BASE_DN}}"

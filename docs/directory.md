@@ -117,7 +117,14 @@ scripts/preflight-directory.sh    # read-only: LDAPS chain, both binds, group, s
 ./deploy.sh                       # runs the pre-flight itself and refuses to continue if it fails
 ```
 The pre-flight writes nothing. It reports the exact `.env` key behind each failure, and
-confirms that `memberOf` is actually searchable before the BIG-IP depends on it.
+confirms the mapping attribute survives a default search before the BIG-IP depends on it.
+
+The same check runs automatically in **bundled** mode too, near the end of `./deploy.sh`,
+against Warden's own seeded directory — so a mapping that would leave everyone read-only is
+reported during the deploy rather than discovered at the webtop. In bundled mode it warns and
+continues (the data is Warden's own); in external mode it is fatal and stops before the
+BIG-IP is touched. Either way it probes as the BIG-IP's read-only bind, which also catches a
+directory ACL that hides the attribute from that account.
 
 ## Active Directory specifics
 - `WARDEN_LDAP_SCHEMA=ad` switches OpenBao to reset `unicodePwd` and defaults

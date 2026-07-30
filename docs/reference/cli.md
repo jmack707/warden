@@ -29,6 +29,7 @@ non-zero failure, and `2` specifically means bad invocation (unknown flag, missi
 | `scripts/configure-openbao.sh` | — | Configure the OpenBao LDAP secrets engine + ephemeral role + audit device |
 | `scripts/issue-cred.sh` | `[principal]` | Issue a credential per `WARDEN_CRED_MODE` (STDOUT only). `static` mode needs the principal (CN); `ephemeral` ignores it. Prints `{mode,username,password,handle,ttl}` |
 | `scripts/revoke-cred.sh` | `<handle>` | Revoke by the handle from `issue-cred.sh`: a lease id → delete the ephemeral account; a CN → rotate the static password |
+| `scripts/lib/authz.sh` | _(sourced)_ | Answers "will the BIG-IP grant Administrator to anyone?" — probes the directory as the BIG-IP's read-only bind over a default search, and flags an admin group the decision ignores. Used by `deploy.sh` (bundled) and `preflight-directory.sh` (external). Not run directly |
 | `scripts/lib/cred.sh` | _(sourced)_ | Shared credential abstraction: `cred_issue`/`cred_revoke` over both models (ADR 0006). Not run directly |
 | `scripts/validate-phase1.sh` | — | GATE 1A — end-to-end local validation, no BIG-IP |
 | `scripts/gen-client-certs.sh` | `<CN> [CN ...]` | Issue Warden-CA client certs + `.p12` bundles for arbitrary principals. Used in external-directory mode, where Warden seeds no users. Writes nothing to the directory |

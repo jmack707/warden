@@ -14,6 +14,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
 # shellcheck disable=SC1091
 . "${HERE}/lib/directory.sh"
+# shellcheck disable=SC1091
+. "${HERE}/lib/authz.sh"
 
 fails=0
 ok()   { printf '  \033[32mok\033[0m   %s\n' "$*"; }
@@ -63,38 +65,7 @@ if grp="$(ldapsearch -x -LLL -H "$URI" -D "${WARDEN_BIND_DN}" -w "${BIND_PW}" \
   note "${members} member attribute(s) on the group entry"
   [ "$members" -gt 0 ] || note "group is empty — nobody will get Administrator until you add members"
   note "BIG-IP will map: ${WARDEN_ADMIN_ROLE_ATTRIBUTE}"
-  # CRITICAL: the BIG-IP evaluates remote-role against the attributes a DEFAULT search
-  # returns for the account it just authenticated — it does not request extra attributes.
-  # So the mapping attribute must come back WITHOUT being asked for by name. OpenLDAP's
-  # memberof overlay makes memberOf *operational* (returned only on request), so a
-  # memberOf mapping silently degrades every user to the default role there. AD and
-  # 389DS/FreeIPA store it as a real attribute and are fine.
-  # Search the PRIVILEGED subtree: the BIG-IP binds those accounts, so that is the entry
-  # whose attributes decide the role.
-  probe="$(ldapsearch -x -LLL -H "$URI" -D "${WARDEN_BIND_DN}" -w "${BIND_PW}" \
-           -b "${WARDEN_PRIV_SEARCH_BASE}" "(${WARDEN_LOGIN_ATTR}=*)" 2>/dev/null)"
-  if grep -qiE "^${WARDEN_ADMIN_ROLE_ATTR}:" <<<"$probe"; then
-    holders="$(grep -icE "^${WARDEN_ADMIN_ROLE_ATTR}: *${WARDEN_ADMIN_ROLE_VALUE}$" <<<"$probe")"
-    ok "${WARDEN_ADMIN_ROLE_ATTR} is returned by a default search — ${holders} privileged account(s) match the admin value"
-    [ "$holders" -gt 0 ] || { bad "no privileged account carries ${WARDEN_ADMIN_ROLE_ATTRIBUTE}"
-      note "the BIG-IP would grant read-only to everyone → add the accounts under ${WARDEN_PRIV_SEARCH_BASE} to the group"; }
-  else
-    bad "${WARDEN_ADMIN_ROLE_ATTR} is NOT returned by a default search of ${WARDEN_PRIV_SEARCH_BASE}"
-    note "the BIG-IP would silently grant read-only (guest) to EVERY user"
-    if [ "$(printf '%s' "$WARDEN_ADMIN_ROLE_ATTR" | tr 'A-Z' 'a-z')" = memberof ]; then
-      if ldapsearch -x -LLL -H "$URI" -D "${WARDEN_BIND_DN}" -w "${BIND_PW}" \
-           -b "${WARDEN_PRIV_SEARCH_BASE}" "(${WARDEN_LOGIN_ATTR}=*)" memberOf 2>/dev/null | grep -qi '^memberOf:'; then
-        note "memberOf EXISTS but only when requested by name — it is an operational"
-        note "attribute here (OpenLDAP memberof overlay). The BIG-IP cannot use it."
-        note "→ set WARDEN_ADMIN_ROLE_ATTRIBUTE to a real attribute your accounts carry,"
-        note "  e.g. WARDEN_ADMIN_ROLE_ATTRIBUTE=employeeType=warden-admins"
-      else
-        note "→ add the privileged accounts to ${WARDEN_ADMIN_GROUP_DN}, or map on another attribute"
-      fi
-    else
-      note "→ stamp ${WARDEN_ADMIN_ROLE_ATTR} on the privileged accounts, or pick another attribute"
-    fi
-  fi
+  warden_check_admin_mapping "$URI" || fails=$((fails+1))
 else
   bad "admin group not found  → set WARDEN_ADMIN_GROUP_DN to an existing group DN"
   note "$(head -2 <<<"$grp" | tr '\n' ' ')"

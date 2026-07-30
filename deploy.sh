@@ -51,6 +51,8 @@ set -a; . ./.env; set +a
 . ./scripts/lib/directory.sh
 # shellcheck disable=SC1091
 . ./scripts/lib/ldif.sh
+# shellcheck disable=SC1091
+. ./scripts/lib/authz.sh
 
 # fail early on unfilled placeholders
 miss=0
@@ -74,6 +76,7 @@ else
   echo "== Warden deploy — OSS stack only (no BIG-IP will be contacted) =="
 fi
 warden_directory_summary
+warden_warn_unused_admin_group
 
 if [ $DO_STACK = 1 ]; then
 echo "== 1/7 TLS material (client-cert CA; LDAPS server cert when bundled) =="
@@ -127,6 +130,18 @@ else
   ./scripts/configure-openbao-static.sh $WARDEN_PRINCIPALS
 fi
 ./scripts/configure-openbao-phase2.sh   # scoped token policy for the APM fetch
+
+if warden_is_bundled; then
+  # Probe as the BIG-IP's own read-only bind, over a default search — the exact conditions
+  # remote-role will face. This is what external mode gets from preflight-directory.sh.
+  echo "== check: will the BIG-IP grant Administrator to anyone? =="
+  if ! warden_check_admin_mapping "ldap://${WARDEN_LDAP_HOST}"; then
+    echo
+    echo "  ^ the deploy continues, but every operator would land READ-ONLY on ${BIGIP_MGMT}."
+    echo "    Fix the mapping and re-run:  ./deploy.sh --bigip"
+    echo
+  fi
+fi
 
 # all local cert signing is done — now slapd can pick up the regenerated TLS material
 # (the restart chowns certs/ to the container user; gen-certs.sh reclaims it next run)
