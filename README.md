@@ -16,6 +16,13 @@ standing credentials — built entirely from open-source parts:
 Design rationale is in [docs/adr/](docs/adr/); the full picture in
 [docs/architecture.md](docs/architecture.md).
 
+**Looking for something smaller?** [warden-lite](https://github.com/jmack707/warden-lite) is
+the same webtop-into-BIG-IP shape without the privileged-access machinery: users sign in with
+a password plus a Keycloak one-time code and get SSO into an HA pair as themselves. No vault,
+no client certificates, no credential rotation. Reach for Warden when operators must never
+hold a standing credential; reach for warden-lite when the goal is MFA in front of management
+with per-user attribution.
+
 ## What you provide
 Warden runs its own OpenBao + OpenLDAP in Docker. You bring **one BIG-IP** (or an HA pair)
 with APM provisioned and licensed, and put its address in `.env`. Everything else — the CA,
