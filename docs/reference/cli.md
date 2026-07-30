@@ -25,11 +25,11 @@ non-zero failure, and `2` specifically means bad invocation (unknown flag, missi
 | Script | Args | Purpose |
 |---|---|---|
 | `scripts/gen-certs.sh` | — | Generate the lab CA + LDAPS server cert (SAN must include `WARDEN_HOST_IP`) |
-| `scripts/gen-test-users.sh` | `<base> <mode>` | Seed the alice/bob/carol test principals + memberOf overlay |
+| `scripts/gen-test-users.sh` | `<base> <mode>` | Seed the alice/bob/carol identity entries, enable the memberof/refint overlay, and issue their client certs. The admin group is seeded separately, after the privileged accounts exist (`ldap/admin-group.ldif`) |
 | `scripts/configure-openbao.sh` | — | Configure the OpenBao LDAP secrets engine + ephemeral role + audit device |
 | `scripts/issue-cred.sh` | `[principal]` | Issue a credential per `WARDEN_CRED_MODE` (STDOUT only). `static` mode needs the principal (CN); `ephemeral` ignores it. Prints `{mode,username,password,handle,ttl}` |
 | `scripts/revoke-cred.sh` | `<handle>` | Revoke by the handle from `issue-cred.sh`: a lease id → delete the ephemeral account; a CN → rotate the static password |
-| `scripts/lib/authz.sh` | _(sourced)_ | Answers "will the BIG-IP grant Administrator to anyone?" — probes the directory as the BIG-IP's read-only bind over a default search, and flags an admin group the decision ignores. Used by `deploy.sh` (bundled) and `preflight-directory.sh` (external). Not run directly |
+| `scripts/lib/authz.sh` | _(sourced)_ | Answers "will the BIG-IP grant Administrator to anyone?" — probes the directory as the BIG-IP's read-only bind over a default search, and flags a hand-set `WARDEN_ADMIN_ROLE_ATTRIBUTE` that bypasses the admin group. Used by `deploy.sh` (bundled) and `preflight-directory.sh` (external). Not run directly |
 | `scripts/lib/cred.sh` | _(sourced)_ | Shared credential abstraction: `cred_issue`/`cred_revoke` over both models (ADR 0006). Not run directly |
 | `scripts/validate-phase1.sh` | — | GATE 1A — end-to-end local validation, no BIG-IP |
 | `scripts/gen-client-certs.sh` | `<CN> [CN ...]` | Issue Warden-CA client certs + `.p12` bundles for arbitrary principals. Used in external-directory mode, where Warden seeds no users. Writes nothing to the directory |
@@ -47,7 +47,7 @@ non-zero failure, and `2` specifically means bad invocation (unknown flag, missi
 ## Lifecycle
 | Script | Args | Purpose |
 |---|---|---|
-| `deploy.sh` | `[--stack\|--bigip\|--all]`, `--help` | Orchestrates everything below in order; see Overview |
+| `deploy.sh` | `[--stack\|--bigip\|--all]`, `--help` | Orchestrates everything below in order; see Overview. In bundled mode it also verifies, before finishing, that the admin group will actually grant Administrator (`scripts/lib/authz.sh`) |
 | `teardown.sh` | `[--stack\|--bigip\|--all] [--purge] [--dry-run] [--yes]`, `--help` | Reverses it. Flips `auth source` back to local BEFORE deleting the LDAP config, restores `remote-user` to `no-access`, and never modifies an external directory |
 
 ## Session termination
