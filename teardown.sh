@@ -121,11 +121,21 @@ fi
 # ─── local stack ──────────────────────────────────────────────────────────────────────
 if [ $DO_STACK = 1 ]; then
   echo; echo "== local stack =="
+  # v2 plugin form, same as deploy.sh — the standalone v1 binary is EOL and unsupported.
+  # Warn rather than abort: the BIG-IP half may already be removed, and --purge of the
+  # local material below does not need compose at all.
+  COMPOSE_OK=1
+  if [ $DRY = 0 ] && ! docker compose version >/dev/null 2>&1; then
+    COMPOSE_OK=0
+    RERUN="./teardown.sh --stack --yes"; [ $PURGE = 1 ] && RERUN="./teardown.sh --stack --purge --yes"
+    echo "  WARN: 'docker compose' (v2 plugin) not available — containers left running." >&2
+    echo "        sudo apt-get install -y docker-compose-v2, then: ${RERUN}" >&2
+  fi
   COMPOSE=(docker compose)
   warden_is_bundled && COMPOSE=(docker compose --profile bundled)
   if [ $DRY = 1 ]; then
     echo "  WOULD ${COMPOSE[*]} down$([ $PURGE = 1 ] && echo ' -v')"
-  else
+  elif [ $COMPOSE_OK = 1 ]; then
     "${COMPOSE[@]}" down $([ $PURGE = 1 ] && echo -v) 2>&1 | sed 's/^/  /'
   fi
   if [ $PURGE = 1 ]; then

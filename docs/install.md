@@ -7,8 +7,11 @@ _Last validated: 2026-07 on Debian 13, docker.io 26.1.5 + Docker Compose v2, Ope
 OpenLDAP (osixia) 1.5.0._
 
 ## Prerequisites
-- A Linux host with `docker` + the Compose v2 plugin (`docker compose`), reachable by the BIG-IP on `:636`
-  (LDAPS) and `:8200` (OpenBao).
+- A Linux host with `docker` + the Compose **v2 plugin**, reachable by the BIG-IP on `:636`
+  (LDAPS) and `:8200` (OpenBao). Every script and runbook invokes it as **`docker compose`**
+  (Debian/Ubuntu: `sudo apt-get install -y docker-compose-v2`). The standalone v1
+  `docker-compose` binary is end-of-life and unsupported — alias it to `docker compose` if
+  that is all a host has.
 - `openssl`, `ldap-utils`, `jq`, and `gettext` (`envsubst`) on the host.
 - REST reachability from this host to the BIG-IP management address on `443`.
 

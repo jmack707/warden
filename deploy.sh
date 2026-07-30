@@ -12,10 +12,23 @@ missing=""
 for c in openssl ldapadd ldapmodify jq envsubst docker; do
   command -v "$c" >/dev/null || missing="$missing $c"
 done
-{ command -v docker >/dev/null && docker compose version >/dev/null 2>&1; } || missing="$missing docker-compose-plugin"
+# Compose is always invoked as `docker compose` (v2 plugin). The standalone v1
+# `docker-compose` binary is EOL and unsupported here.
+COMPOSE_MISSING=0
+{ command -v docker >/dev/null && docker compose version >/dev/null 2>&1; } || COMPOSE_MISSING=1
+[ "$COMPOSE_MISSING" = 0 ] || missing="$missing docker-compose-plugin"
 [ -z "$missing" ] || {
   echo "missing prereqs:$missing" >&2
-  echo "on Debian/Ubuntu: sudo apt-get install -y ldap-utils jq gettext-base openssl  (docker + compose plugin per docs/install.md)" >&2
+  echo "on Debian/Ubuntu: sudo apt-get install -y ldap-utils jq gettext-base openssl" >&2
+  if [ "$COMPOSE_MISSING" = 1 ]; then
+    echo "compose: this repo uses the v2 plugin form 'docker compose'." >&2
+    if command -v docker-compose >/dev/null 2>&1; then
+      echo "  found a standalone 'docker-compose' ($(docker-compose version --short 2>/dev/null || echo '?')) but no plugin." >&2
+      echo "  install it:  sudo apt-get install -y docker-compose-v2   (or alias docker-compose -> docker compose)" >&2
+    else
+      echo "  install it:  sudo apt-get install -y docker-compose-v2   (see docs/install.md)" >&2
+    fi
+  fi
   exit 1
 }
 

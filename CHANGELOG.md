@@ -26,6 +26,13 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
   APM fetch token is periodic (768h) and previously expired silently after 32 days,
   breaking SSO injection with no visible error until login.
 
+### Changed
+- Compose is standardized on the **v2 plugin form `docker compose`** across scripts, docs and
+  runbooks (the standalone v1 `docker-compose` binary is end-of-life and unsupported; only the
+  `docker-compose*.yml` filenames keep the hyphen, per Compose convention). `deploy.sh` names
+  the fix when the plugin is missing — including detecting a standalone binary — and
+  `teardown.sh` warns and leaves containers running rather than failing opaquely.
+
 ### Fixed
 - `deploy.sh` re-runs no longer mint a new CA. `gen-certs.sh` reused an existing
   `certs/ca.{crt,key}` — the previous behavior silently invalidated every issued client cert
