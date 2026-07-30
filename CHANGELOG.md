@@ -21,6 +21,11 @@ Notable changes to Warden. Dates are absolute. Engineering notes are in
   rejected by the directory. The name is now derived from the DN.
 
 ### Added
+- Worked `.env` examples in [docs/directory.md](docs/directory.md) for **Active Directory**,
+  **OpenLDAP** and **FreeIPA/389DS**, each stating what it resolves to and why it differs —
+  AD derives the rule from the group, OpenLDAP must override it because its `memberOf` is
+  operational. Verified against the resolver. The two per-directory prose sections were
+  folded into them, which also removed a duplicate `FreeIPA / 389DS` heading.
 - **The admin mapping is now verified by the tooling, not just documented**
   (`scripts/lib/authz.sh`). The failure it catches is silent: the BIG-IP evaluates
   `remote-role` only against attributes a *default* LDAP search returns, so an operational
