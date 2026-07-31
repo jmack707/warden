@@ -32,7 +32,7 @@ consistent everywhere. Two rules make the rest of this page readable:
 | `WARDEN_USER_SEARCH_BASE` | LDAP DN | `ou=people,${BASE_DN}` | no | Identity subtree (read-only) |
 | `WARDEN_PRIV_SEARCH_BASE` | LDAP DN | `ou=users,${BASE_DN}` | no | Privileged accounts **whose passwords OpenBao rotates** — use a dedicated OU |
 | `WARDEN_DIR_ADMIN_DN` / `_PW` | DN + string | bundled `cn=admin,${BASE_DN}` + `LDAP_ADMIN_PW` | external only | Account allowed to reset passwords on the privileged subtree |
-| `WARDEN_LOGIN_ATTR` | string | `uid` (`sAMAccountName` when `ad`) | no | Attribute the cert CN is matched against |
+| `WARDEN_LOGIN_ATTR` | string | `uid` (`sAMAccountName` when `ad`) | no | Attribute the cert CN is matched against and the BIG-IP logs in with. Set `cn` on AD — the default cannot serve both lookups there ([directory.md](../directory.md#active-directory)) |
 | `WARDEN_PRIV_DN_ATTR` | string | `uid` (`cn` when `ad`) | no | RDN attribute of privileged-account DNs |
 | `WARDEN_PRINCIPALS` | string list | _(none)_ | external only | CNs to issue client certs + static roles for |
 | `BIGIP_MGMT` | IPv4 | `<bigip-a-mgmt-ip>` | yes | Target BIG-IP (bigipa) REST/management address |

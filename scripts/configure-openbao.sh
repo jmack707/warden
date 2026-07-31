@@ -17,17 +17,37 @@ bao write sys/policies/password/warden-ephemeral policy=@/warden/pw-policy.hcl
 # bundled: reach OpenLDAP over the compose network by service name; external: over the
 # wire (LDAPS) to your directory. The bind account must be able to reset passwords on
 # WARDEN_PRIV_SEARCH_BASE — nothing else.
-bao write ldap/config \
-  binddn="${WARDEN_DIR_ADMIN_DN}" bindpass="${WARDEN_DIR_ADMIN_PW}" \
-  url="${WARDEN_BAO_LDAP_URL}" schema="${WARDEN_LDAP_SCHEMA}" password_policy=warden-ephemeral
+# userdn/userattr: the engine resolves static-role usernames by searching
+# <userattr>=<username> under <userdn>; without them the search base is empty and AD
+# returns NO_OBJECT (bundled OpenLDAP tolerated the omission — AD does not).
+CONFIG_ARGS=(
+  binddn="${WARDEN_DIR_ADMIN_DN}" bindpass="${WARDEN_DIR_ADMIN_PW}"
+  url="${WARDEN_BAO_LDAP_URL}" schema="${WARDEN_LDAP_SCHEMA}"
+  userdn="${WARDEN_PRIV_SEARCH_BASE}" userattr="${WARDEN_PRIV_DN_ATTR}"
+  password_policy=warden-ephemeral
+)
+# external LDAPS: OpenBao must trust the issuing CA or every bind fails with
+# "certificate signed by unknown authority". Copy the PEM into the bind mount so the
+# in-container @file reference resolves.
+if ! warden_is_bundled && [ -n "${WARDEN_LDAP_CA_FILE:-}" ]; then
+  case "${WARDEN_LDAP_CA_FILE}" in /*) CAF="${WARDEN_LDAP_CA_FILE}";; *) CAF="${HERE}/../${WARDEN_LDAP_CA_FILE}";; esac
+  install -m 0644 "$CAF" "${HERE}/../openbao/ldaps-ca.pem"
+  CONFIG_ARGS+=(certificate=@/warden/ldaps-ca.pem)
+fi
+bao write ldap/config "${CONFIG_ARGS[@]}"
 
 # The ephemeral role's LDIFs are templated (the privileged subtree + admin stamp are
 # config, not constants) — render them into the container's bind mount.
 # sed drops blank lines: an empty stamp (group-based mapping) would otherwise leave one,
 # and a blank line in LDIF terminates the entry.
+# Schema matters: AD refuses inetOrgPerson/uid/userPassword — it needs objectClass user,
+# a CN RDN, sAMAccountName, and unicodePwd (UTF-16LE, quoted) over LDAPS. The -ad
+# templates carry that shape; the engine's template functions do the encoding.
+LDIF_SUFFIX=""
+[ "${WARDEN_LDAP_SCHEMA}" = ad ] && LDIF_SUFFIX="-ad"
 for f in creation deletion rollback; do
   envsubst '${WARDEN_PRIV_SEARCH_BASE} ${WARDEN_PRIV_STAMP_LDIF}' \
-    < "${HERE}/../openbao/${f}.ldif.tmpl" | sed '/^[[:space:]]*$/d' > "${HERE}/../openbao/${f}.ldif"
+    < "${HERE}/../openbao/${f}${LDIF_SUFFIX}.ldif.tmpl" | sed '/^[[:space:]]*$/d' > "${HERE}/../openbao/${f}.ldif"
 done
 
 bao write ldap/role/warden-admin \

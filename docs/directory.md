@@ -5,8 +5,9 @@ first look, useless for showing the flow against *your* users. Set
 `WARDEN_DIRECTORY_MODE=external` and Warden uses your directory instead, creating nothing
 in it.
 
-_Last validated: 2026-07 — bundled and external (OpenLDAP) on Debian 13; the AD notes are
-schema-derived, not yet lab-verified against a DC._
+_Last validated: 2026-07 — bundled and external (OpenLDAP) on Debian 13; external (AD)
+against a real Windows Server 2025 DC (warden-ad.lab), both credential modes, full
+cert→webtop→role matrix._
 
 ## What Warden needs from a directory
 Two separate things. Keep them separate when you point Warden at your own:
@@ -133,7 +134,8 @@ WARDEN_DOMAIN=corp.example.com          # client-cert email SAN suffix
 BASE_DN=DC=corp,DC=example,DC=com
 
 WARDEN_LDAP_HOST=dc01.corp.example.com
-WARDEN_LDAP_SCHEMA=ad                   # sAMAccountName login, CN= DNs, unicodePwd resets
+WARDEN_LDAP_SCHEMA=ad                   # CN= DNs, unicodePwd resets
+WARDEN_LOGIN_ATTR=cn                    # REQUIRED on AD — see the first point below
 WARDEN_LDAP_CA_FILE=/etc/ssl/certs/corp-root-ca.pem
 
 WARDEN_BIND_DN=CN=svc-bigip-bind,OU=Service,DC=corp,DC=example,DC=com
@@ -148,20 +150,35 @@ WARDEN_ADMIN_ROLE_ATTRIBUTE=            # empty: derived as memberOf=<the group>
 WARDEN_PRINCIPALS="alice.admin bob.user"
 ```
 
-Resolves to login on `sAMAccountName`, privileged DNs built with `CN=`, the rule
+Resolves to login on `cn`, privileged DNs built with `CN=`, the rule
 `memberOf=CN=BigipAdmins,…`, OpenBao over `ldaps://dc01.corp.example.com:636`, and no stamp.
+_Validated 2026-07 against a Windows Server 2025 DC — both credential modes, full
+cert→webtop→role matrix._
 
-Four AD-specific points:
+Five AD-specific points, all verified against that DC:
 
-- Create the PAM accounts with **`CN` equal to `sAMAccountName`**, because Warden builds their
-  DN as `<WARDEN_PRIV_DN_ATTR>=<name>,<WARDEN_PRIV_SEARCH_BASE>` from the name you pass in
-  `WARDEN_PRINCIPALS`. Where they must differ, pass explicit DNs to
-  `scripts/configure-openbao-static.sh` instead.
+- **`WARDEN_LOGIN_ATTR=cn` is required.** The schema default (`sAMAccountName`) cannot
+  work with the identity/PAM split this doc prescribes: `sAMAccountName` is unique per
+  domain, and the same attribute both matches the cert CN under
+  `WARDEN_USER_SEARCH_BASE` and logs the injected credential into the BIG-IP under
+  `WARDEN_PRIV_SEARCH_BASE` — the identity account and its PAM twin would need the same
+  value, which AD refuses. `cn` is unique only per container: give both accounts
+  `CN=<principal>` (the PAM account's own `sAMAccountName` can be anything, e.g.
+  `pam-alice.admin`) and both lookups resolve. With the default attribute the BIG-IP
+  login fails; with `cn` the matrix passes.
 - `CN=BigipAdmins` must contain those **PAM accounts**, not the staff identities.
 - **Nested groups are not expanded** by the BIG-IP's remote-role — make operators direct
   members of the group you name.
 - Password resets over LDAP **require LDAPS on the domain controller**; plain 389 refuses
-  them. That is why `WARDEN_LDAP_CA_FILE` is mandatory in external mode.
+  them. That is why `WARDEN_LDAP_CA_FILE` is mandatory in external mode. If the DC's
+  LDAPS cert is self-signed (no AD CS), two extra steps or Schannel never serves it: the
+  cert must sit in the DC's **Trusted Root** store as well as its Personal store, and be
+  loaded via a rootDSE `renewServerCertificate` modify — restarting NTDS does nothing,
+  and the failure (TCP accepts, reset at ClientHello) looks like a network problem.
+- **Ephemeral mode needs more delegation than static**: the rotate account must also hold
+  create/delete child (`user` objects) on the privileged OU — `dsacls <OU>
+  /G "<domain>\svc-warden-rotate:CCDC;user"` — on top of Reset Password. Static needs
+  only the reset delegation.
 
 ### OpenLDAP
 The case the override exists for. With the `memberof` overlay, `memberOf` is operational and
