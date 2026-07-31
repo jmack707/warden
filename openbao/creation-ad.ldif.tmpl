@@ -1,0 +1,8 @@
+dn: CN={{.Username}},${WARDEN_PRIV_SEARCH_BASE}
+changetype: add
+objectClass: user
+cn: {{.Username}}
+sAMAccountName: {{.Username}}
+userAccountControl: 512
+${WARDEN_PRIV_STAMP_LDIF}
+unicodePwd:: {{ printf "\"%s\"" .Password | utf16le | base64 }}

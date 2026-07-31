@@ -3,6 +3,31 @@
 Notable changes to Warden. Dates are absolute. Engineering notes are in
 [DEVIATIONS.md](DEVIATIONS.md); decisions in [docs/adr/](docs/adr/).
 
+## 2026-07-31
+### Fixed
+- **External AD directory mode is now lab-verified** against a real Windows Server 2025
+  DC (both credential modes, full cert→webtop→role matrix). Four bugs the bundled
+  OpenLDAP had masked, all found on the first real run:
+  - `scripts/gen-certs.sh` failed on a fresh clone — `certs/` is gitignored and the
+    script `cd`'d into it without creating it.
+  - `scripts/configure-openbao.sh` never passed the LDAPS CA to OpenBao's LDAP engine
+    (`certificate=`), so every external LDAPS bind failed with *certificate signed by
+    unknown authority*. It also omitted `userdn`/`userattr`, which AD answers with
+    `NO_OBJECT` on static-role creation.
+  - The ephemeral-mode LDIF templates were OpenLDAP-only (`inetOrgPerson`, `uid` RDN,
+    `userPassword`). AD-schema variants (`objectClass user`, CN RDN, `sAMAccountName`,
+    `unicodePwd` via the engine's `utf16le|base64` template functions) are selected
+    automatically when `WARDEN_LDAP_SCHEMA=ad`.
+  - `scripts/validate-phase1.sh` hardcoded the bundled directory (plain `ldap://` to the
+    compose host, `cn=admin`, `ou=users`, `uid=`); it now validates through the same
+    directory abstraction as everything else and passes in both modes.
+- [docs/directory.md](docs/directory.md): the AD guidance was schema-derived and partly
+  wrong — under AD, `WARDEN_LOGIN_ATTR=cn` is required (domain-unique `sAMAccountName`
+  cannot serve both the identity lookup and the privileged-account login), ephemeral
+  mode needs create/delete-child delegation on top of Reset Password, and a self-signed
+  LDAPS cert must sit in the DC's Trusted Root store and be loaded via a rootDSE
+  `renewServerCertificate` modify.
+
 ## 2026-07-30
 ### Changed
 - **The admin group is now the single setting that decides who is an administrator**, and it

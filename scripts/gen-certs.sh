@@ -6,6 +6,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 set -a; . "${HERE}/../.env"; set +a
 # shellcheck disable=SC1091
 . "${HERE}/lib/directory.sh"
+mkdir -p "${HERE}/../certs"   # gitignored — absent on a fresh clone
 cd "${HERE}/../certs"
 
 # shellcheck disable=SC1091
