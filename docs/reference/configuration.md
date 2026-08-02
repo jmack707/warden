@@ -25,6 +25,7 @@ consistent everywhere. Two rules make the rest of this page readable:
 | `WARDEN_ADMIN_GROUP_DN` | LDAP DN | `cn=bigip-admins,ou=groups,${BASE_DN}` | no | **The admin group: its members get Administrator, everyone else read-only.** Bundled creates it and adds the seeded privileged account; external expects it to exist and to contain your privileged accounts |
 | `WARDEN_ADMIN_ROLE_ATTRIBUTE` | `attr=value` | derived from the group | no | _Advanced._ Overrides **how** membership is tested, for directories that cannot express it the derived way. Empty is correct unless the check below fails |
 | `WARDEN_LDAP_HOST` | host/IPv4 | `${WARDEN_HOST_IP}` | external only | Your directory address |
+| `WARDEN_LDAP_HOST_IP` | IPv4 | empty | no | Address to publish `WARDEN_LDAP_HOST` at **inside the OpenBao container**, for a name no nameserver can resolve (containers never read this host's `/etc/hosts`). Renders `docker-compose.override.yml`; leaving it empty removes that file again |
 | `WARDEN_LDAP_PORT` / `WARDEN_LDAPS_PORT` | int | `389` / `636` | no | APM AAA query port / LDAPS port |
 | `WARDEN_LDAP_SCHEMA` | enum `openldap`\|`ad` | `openldap` | no | `ad` resets `unicodePwd` and defaults the login attribute to `sAMAccountName` |
 | `WARDEN_LDAP_CA_FILE` | path | bundled `certs/ca.crt` | external only | PEM of the CA that issued your LDAPS cert |
