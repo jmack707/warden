@@ -17,6 +17,17 @@ set -a; . "${HERE}/../.env"; set +a
 # shellcheck disable=SC1091
 . "${HERE}/lib/authz.sh"
 
+# This script is also run standalone (deploy.sh checks prereqs itself). Without this a
+# missing ldapsearch makes every check below fail, and the output blames .env values that
+# are perfectly correct.
+pf_missing=""
+for c in ldapsearch openssl; do command -v "$c" >/dev/null || pf_missing="$pf_missing $c"; done
+[ -z "$pf_missing" ] || {
+  echo "missing prereqs:$pf_missing" >&2
+  echo "on Debian/Ubuntu: sudo apt-get install -y ldap-utils openssl" >&2
+  exit 1
+}
+
 fails=0
 ok()   { printf '  \033[32mok\033[0m   %s\n' "$*"; }
 bad()  { printf '  \033[31mFAIL\033[0m %s\n' "$*"; fails=$((fails+1)); }
@@ -75,6 +86,21 @@ echo "== 4/5. privileged subtree + password-reset bind =="
 if ldapsearch -x -LLL -H "$URI" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" \
      -b "${WARDEN_PRIV_SEARCH_BASE}" -s base dn >/dev/null 2>&1; then
   ok "bind as ${WARDEN_DIR_ADMIN_DN} + read ${WARDEN_PRIV_SEARCH_BASE}"
+  # Reading the OU is NOT enough: OpenBao resolves each account by SEARCHING
+  # <WARDEN_PRIV_DN_ATTR>=<name> under this base, as this same account. A directory can
+  # allow the OU read and still return nothing for that search — 389DS/FreeIPA do exactly
+  # that until the rotate account is granted read there — and it surfaces much later as
+  # OpenBao's opaque "expected one matching entry, but received 0".
+  n_priv="$(ldapsearch -x -LLL -H "$URI" -D "${WARDEN_DIR_ADMIN_DN}" -w "${WARDEN_DIR_ADMIN_PW}" \
+            -b "${WARDEN_PRIV_SEARCH_BASE}" "(${WARDEN_PRIV_DN_ATTR}=*)" dn 2>/dev/null | grep -c '^dn:')"
+  if [ "${n_priv:-0}" -gt 0 ]; then
+    ok "and it can SEARCH inside the subtree (${n_priv} account(s) visible to it)"
+  else
+    bad "the privileged bind sees NO accounts under ${WARDEN_PRIV_SEARCH_BASE}"
+    note "it can read the OU but not search inside it — OpenBao needs both, and would"
+    note "otherwise fail with: expected one matching entry, but received 0"
+    note "grant ${WARDEN_DIR_ADMIN_DN} read/search there, not only password-write"
+  fi
   note "OpenBao will RESET PASSWORDS on accounts under here — keep it a dedicated OU"
   note "(this pre-flight does not test the write; the first rotation will)"
 else

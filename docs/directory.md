@@ -90,12 +90,27 @@ decides on the attribute.
 
 ## Setup
 ### 1. Prepare the directory (you do this, once)
-- A **read-only service account** for searches → `WARDEN_BIND_DN` / `BIND_PW`.
+- A **read-only service account** for searches → `WARDEN_BIND_DN` / `BIND_PW`. It must be
+  able to read the mapping attribute (`memberOf` by default) on the privileged accounts;
+  directories that strip attributes for unprivileged binds would otherwise leave everyone
+  read-only. The pre-flight checks exactly that.
 - An account that may **reset passwords** on the privileged OU → `WARDEN_DIR_ADMIN_DN` /
-  `WARDEN_DIR_ADMIN_PW`. Delegate exactly that, nothing more.
+  `WARDEN_DIR_ADMIN_PW`. It needs two rights, not one: **read/search** on that OU (OpenBao
+  looks each account up before rotating it) and **password write**. Reset-only delegation
+  survives a naive connectivity check and then fails with OpenBao's opaque *expected one
+  matching entry, but received 0*. `WARDEN_CRED_MODE=ephemeral` additionally needs
+  **create/delete** of entries there. Nothing beyond that, and nothing outside that OU.
 - A **dedicated OU** for privileged accounts, one per operator who needs BIG-IP admin
   (`WARDEN_PRIV_SEARCH_BASE`).
 - The **admin group**, with the right operators in it.
+- `WARDEN_LDAP_HOST` resolvable **from three places**, because three different things
+  connect to your directory: this host (the scripts), the **OpenBao container**, and the
+  **BIG-IP**. Containers do not read this host's `/etc/hosts`, and TMOS `dns-resolver`
+  cannot read a hosts file either — so a name that only lives in `/etc/hosts` works for
+  `ldapsearch` here and fails in both of the others. Set `WARDEN_LDAP_HOST_IP` and Warden
+  publishes the name inside the container; point the BIG-IP's DNS at a resolver that knows
+  it. Substituting a bare IP only works if the LDAPS certificate carries a matching IP
+  SAN, which most do not.
 - **LDAPS** working, and the issuing CA exported to a PEM (`WARDEN_LDAP_CA_FILE`). The
   BIG-IP validates the chain and fails closed if it cannot.
 
@@ -212,7 +227,7 @@ delete the override and let it derive.
 
 ### FreeIPA / 389DS
 Start from the OpenLDAP block with these differences. `memberOf` is plugin-written and
-usually returned normally, so try the derived rule first and let the pre-flight decide.
+returned normally, so the derived rule works — the pre-flight confirms it.
 
 ```bash
 BASE_DN=dc=lab,dc=example,dc=com
@@ -222,11 +237,44 @@ WARDEN_PRIV_SEARCH_BASE=ou=pam,dc=lab,dc=example,dc=com
 WARDEN_ADMIN_ROLE_ATTRIBUTE=
 ```
 
-Two caveats worth planning around. FreeIPA's account tree is fixed, so a dedicated
-privileged subtree either sits outside IPA management (`ou=pam` at the root, which IPA
-tooling will not manage) or you accept privileged accounts living among ordinary ones in
-`cn=users` — neither is as tidy as an AD OU. And IPA enforces password policy on resets, so
-OpenBao's generated passwords have to satisfy it or rotation fails.
+_Validated 2026-08 against FreeIPA on Rocky 9 (389DS), credential core in both modes:
+pre-flight, static rotation, and ephemeral create→bind→revoke→delete._
+
+FreeIPA's account tree is fixed, so a dedicated privileged subtree either sits outside IPA
+management (`ou=pam` at the root, which IPA tooling will not manage) or you accept
+privileged accounts living among ordinary ones in `cn=users`. The `ou=pam` shape is the one
+validated here, and three things about it are worth knowing:
+
+- **`memberOf` still works there.** The plugin's `memberOfEntryScope` is the whole suffix by
+  default, so plain `inetOrgPerson` entries in a subtree IPA does not manage still get
+  `memberOf` computed from a `groupOfNames` — the group mapping decides roles exactly as it
+  does inside `cn=accounts`.
+- **`uid` may repeat across containers**, because FreeIPA ships the `attribute uniqueness`
+  plugin **disabled**. So the identity and its privileged twin can share
+  `uid=<principal>` in different subtrees, and `WARDEN_LOGIN_ATTR=uid` serves both lookups
+  — the collision that forces `WARDEN_LOGIN_ATTR=cn` on AD does not arise. Confirm with
+  `ldapsearch -b cn=attribute\ uniqueness,cn=plugins,cn=config` before relying on it.
+- **You must add ACIs; the defaults are not enough.** IPA's default ACIs strip attributes
+  from unprivileged binds, so the read-only account sees no `memberOf`, and the rotate
+  account can bind while seeing nothing under the privileged OU. On the two containers:
+
+  ```
+  # on the parent of the subtrees — let the BIG-IP's bind account read entries
+  aci: (targetattr="*")(version 3.0; acl "warden-bind read";
+       allow (read,search,compare) userdn="ldap:///uid=warden-bind,ou=svc,...";)
+  # on the privileged OU — search + password write (add/delete too, for ephemeral)
+  aci: (targetattr="*")(version 3.0; acl "warden-rotate read";
+       allow (read,search,compare) userdn="ldap:///uid=warden-rotate,ou=svc,...";)
+  aci: (targetattr="userPassword")(version 3.0; acl "warden-rotate pw";
+       allow (write) userdn="ldap:///uid=warden-rotate,ou=svc,...";)
+  aci: (target="ldap:///uid=*,ou=pam,...")(version 3.0; acl "warden-rotate create";
+       allow (add,delete) userdn="ldap:///uid=warden-rotate,ou=svc,...";)
+  ```
+
+IPA enforces password policy on resets of *its own* accounts, so OpenBao's generated
+passwords have to satisfy it or rotation fails. Entries in a raw subtree carry no Kerberos
+principal and so are not subject to that policy — one more reason the `ou=pam` shape is the
+easier of the two.
 
 ## Credential model interaction
 `WARDEN_CRED_MODE=ephemeral` has OpenBao *create* throwaway accounts, which means it must
